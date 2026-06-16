@@ -158,6 +158,10 @@ await pool.query('ALTER TABLE acc_accounts ADD COLUMN IF NOT EXISTS is_accruing 
     `);
     console.log('✅ Card statement tracking ready');
 
+await pool.query('ALTER TABLE acc_accounts ADD COLUMN IF NOT EXISTS shareholder_name VARCHAR(100)');
+    await pool.query('ALTER TABLE acc_accounts ADD COLUMN IF NOT EXISTS share_percentage NUMERIC(5,2)');
+    console.log('✅ Shareholder tracking ready');
+
 await pool.query(`
       CREATE TABLE IF NOT EXISTS acc_settings (
         key VARCHAR(50) PRIMARY KEY,

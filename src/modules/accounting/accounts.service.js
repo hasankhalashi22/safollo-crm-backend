@@ -24,32 +24,55 @@ const createAccount = async (data) => {
     code, name, account_type, account_subtype,
     bank_name, credit_limit, interest_rate,
     investor_name, principal_amount, profit_rate,
-    contract_start_date, contract_end_date
+    contract_start_date, contract_end_date,
+    shareholder_name, share_percentage
   } = data;
+
+  if (account_subtype === 'shareholder' && share_percentage) {
+    const existing = await query(
+      `SELECT COALESCE(SUM(share_percentage), 0) as total FROM acc_accounts WHERE account_subtype = 'shareholder' AND is_active = TRUE`
+    );
+    const currentTotal = parseFloat(existing.rows[0].total) || 0;
+    if (currentTotal + parseFloat(share_percentage) > 100) {
+      throw { statusCode: 400, message: `Total share percentage cannot exceed 100%. Currently allocated: ${currentTotal}%, remaining: ${100 - currentTotal}%` };
+    }
+  }
 
   const result = await query(
     `INSERT INTO acc_accounts
        (code, name, account_type, account_subtype, bank_name, credit_limit, interest_rate,
-        investor_name, principal_amount, profit_rate, contract_start_date, contract_end_date)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        investor_name, principal_amount, profit_rate, contract_start_date, contract_end_date,
+        shareholder_name, share_percentage)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING *`,
     [code || null, name, account_type, account_subtype || null,
      bank_name || null, credit_limit || null, interest_rate || null,
      investor_name || null, principal_amount || null, profit_rate || null,
-     contract_start_date || null, contract_end_date || null]
+     contract_start_date || null, contract_end_date || null,
+     shareholder_name || null, share_percentage || null]
   );
   return result.rows[0];
 };
-
 const updateAccount = async (id, data) => {
+  if (data.share_percentage !== undefined && data.share_percentage !== null && data.share_percentage !== '') {
+    const existing = await query(
+      `SELECT COALESCE(SUM(share_percentage), 0) as total FROM acc_accounts WHERE account_subtype = 'shareholder' AND is_active = TRUE AND id != $1`,
+      [id]
+    );
+    const currentTotal = parseFloat(existing.rows[0].total) || 0;
+    if (currentTotal + parseFloat(data.share_percentage) > 100) {
+      throw { statusCode: 400, message: `Total share percentage cannot exceed 100%. Other shareholders currently hold: ${currentTotal}%, remaining: ${100 - currentTotal}%` };
+    }
+  }
+
   const fields = [];
   const params = [];
   let idx = 1;
 
-  const allowedFields = [
+ const allowedFields = [
     'name', 'account_subtype', 'is_active', 'bank_name', 'credit_limit',
     'interest_rate', 'investor_name', 'principal_amount', 'profit_rate',
-    'contract_start_date', 'contract_end_date'
+    'contract_start_date', 'contract_end_date', 'shareholder_name', 'share_percentage'
   ];
 
   for (const field of allowedFields) {
