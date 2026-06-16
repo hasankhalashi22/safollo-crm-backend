@@ -75,10 +75,17 @@ const updateAccount = async (id, data) => {
     'contract_start_date', 'contract_end_date', 'shareholder_name', 'share_percentage'
   ];
 
+  const numericFields = ['credit_limit', 'interest_rate', 'principal_amount', 'profit_rate', 'share_percentage'];
+  const dateFields = ['contract_start_date', 'contract_end_date'];
+
   for (const field of allowedFields) {
     if (data[field] !== undefined) {
+      let value = data[field];
+      if ((numericFields.includes(field) || dateFields.includes(field)) && value === '') {
+        value = null;
+      }
       fields.push(`${field} = $${idx++}`);
-      params.push(data[field]);
+      params.push(value);
     }
   }
 
