@@ -143,5 +143,64 @@ const updateTransaction = async (id, data, proofFile) => {
     return result.rows[0];
   });
 };
+const distributeProfitToShareholders = async (data, userId) => {
+  const { transaction_date, total_amount, paid_from_account_id, description } = data;
 
-module.exports = { createTransaction, getTransactions, deleteTransaction, updateTransaction };
+  if (!total_amount || parseFloat(total_amount) <= 0) {
+    throw { statusCode: 400, message: 'সঠিক পরিমাণ দিন' };
+  }
+  if (!paid_from_account_id) {
+    throw { statusCode: 400, message: 'কোথা থেকে দেওয়া হচ্ছে সেটা বেছে নিন' };
+  }
+
+  const shareholdersResult = await query(
+    `SELECT id, name, shareholder_name, share_percentage FROM acc_accounts
+     WHERE account_subtype = 'shareholder' AND is_active = TRUE AND share_percentage IS NOT NULL`
+  );
+  const shareholders = shareholdersResult.rows;
+
+  if (shareholders.length === 0) {
+    throw { statusCode: 400, message: 'কোনো শেয়ারহোল্ডার একাউন্ট পাওয়া যায়নি' };
+  }
+
+  const totalPercentage = shareholders.reduce((sum, s) => sum + parseFloat(s.share_percentage), 0);
+  if (Math.abs(totalPercentage - 100) > 0.01) {
+    throw { statusCode: 400, message: `শেয়ারহোল্ডারদের মোট শেয়ার ১০০% হতে হবে, বর্তমানে ${totalPercentage}%` };
+  }
+
+  return await withTransaction(async (client) => {
+    const txnResult = await client.query(
+      `INSERT INTO acc_transactions
+         (transaction_date, transaction_type, description, amount,
+          debit_account_id, credit_account_id, created_by)
+       VALUES ($1, 'profit_distribution', $2, $3, $4, $4, $5)
+       RETURNING *`,
+      [transaction_date, description || 'Profit distribution to shareholders',
+       total_amount, paid_from_account_id, userId]
+    );
+    const txn = txnResult.rows[0];
+
+    // Credit: cash/bank account decreases (full amount)
+    await client.query(
+      `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date)
+       VALUES ($1, $2, 'credit', $3, $4)`,
+      [txn.id, paid_from_account_id, total_amount, transaction_date]
+    );
+
+    // Debit: each shareholder's equity account decreases by their share
+    const breakdown = [];
+    for (const sh of shareholders) {
+      const shareAmount = Math.round((parseFloat(total_amount) * parseFloat(sh.share_percentage) / 100) * 100) / 100;
+      await client.query(
+        `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date)
+         VALUES ($1, $2, 'debit', $3, $4)`,
+        [txn.id, sh.id, shareAmount, transaction_date]
+      );
+      breakdown.push({ shareholder: sh.shareholder_name || sh.name, percentage: sh.share_percentage, amount: shareAmount });
+    }
+
+    return { ...txn, breakdown };
+  });
+};
+
+module.exports = { createTransaction, getTransactions, deleteTransaction, updateTransaction, distributeProfitToShareholders };

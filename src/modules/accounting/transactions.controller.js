@@ -65,4 +65,11 @@ const updateTransaction = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { createTransaction, getTransactions, deleteTransaction, updateTransaction };
+const distributeProfitToShareholders = async (req, res, next) => {
+  try {
+    const result = await transactionsService.distributeProfitToShareholders(req.body, req.user.id);
+    res.status(201).json({ success: true, data: result, message: 'Profit distributed to shareholders' });
+  } catch (err) { next(err); }
+};
+
+module.exports = { createTransaction, getTransactions, deleteTransaction, updateTransaction, distributeProfitToShareholders };
