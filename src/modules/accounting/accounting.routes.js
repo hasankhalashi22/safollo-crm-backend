@@ -38,7 +38,7 @@ router.get('/investors', accountsController.getInvestorsOverview);
 router.patch('/investors/:id/accrual', accountsController.toggleInvestorAccrual);
 router.get('/investors/:id/history', accountsController.getInvestorHistory);
 router.post('/card-statements/analyze', uploadMemory.single('statement'), statementController.analyzeStatement);
-router.post('/card-statements/confirm', statementController.confirmStatement);
+router.post('/card-statements/confirm', uploadMemory.none(), statementController.confirmStatement);
 
 router.post('/transactions', uploadPayment.single('proof'), transactionsController.createTransaction);
 router.get('/transactions', transactionsController.getTransactions);
