@@ -5,7 +5,7 @@ const METHOD_TO_ACCOUNT = {
   bkash: 'bKash Wallet',
   nagad: 'Nagad Wallet',
   rocket: 'Rocket Wallet',
-  cash: 'Cash',
+  cash: 'Petty Cash',
   cod: 'Steadfast Wallet',
 };
 
