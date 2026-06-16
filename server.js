@@ -240,7 +240,14 @@ await pool.query('ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_book BOOLEAN D
     } catch (e) {
       console.error('Super admin error:', e.message);
     }
-
+app.get('/debug-check-columns', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name='acc_accounts' AND column_name IN ('shareholder_name','share_percentage')`);
+    res.json({ columns: result.rows });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
     app.listen(PORT, () => {
       console.log(`🚀 সাফল্য CRM API running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
