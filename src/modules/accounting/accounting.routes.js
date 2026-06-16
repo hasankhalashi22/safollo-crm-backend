@@ -40,6 +40,7 @@ router.get('/investors/:id/history', accountsController.getInvestorHistory);
 router.post('/card-statements/analyze', uploadMemory.single('statement'), statementController.analyzeStatement);
 router.post('/card-statements/confirm', uploadMemory.any(), statementController.confirmStatement);
 router.post('/transactions/distribute-profit', transactionsController.distributeProfitToShareholders);
+router.get('/shareholders', accountsController.getShareholdersOverview);
 
 router.post('/transactions', uploadPayment.single('proof'), transactionsController.createTransaction);
 router.get('/transactions', transactionsController.getTransactions);

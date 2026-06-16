@@ -765,4 +765,39 @@ const getInvestorHistory = async (investorId) => {
   return { entries: combined };
 };
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory };
+const getShareholdersOverview = async () => {
+  const result = await query(
+    `SELECT id, name, shareholder_name, share_percentage
+     FROM acc_accounts
+     WHERE is_active = TRUE AND account_subtype = 'shareholder'
+     ORDER BY code`
+  );
+
+  const shareholders = [];
+  for (const sh of result.rows) {
+    // Total profit received (debit entries on this equity account = withdrawal)
+    const receivedResult = await query(
+      `SELECT COALESCE(SUM(amount), 0) as total_received
+       FROM acc_journal_entries
+       WHERE account_id = $1 AND entry_type = 'debit'`,
+      [sh.id]
+    );
+    const totalReceived = parseFloat(receivedResult.rows[0].total_received) || 0;
+
+    shareholders.push({
+      id: sh.id,
+      name: sh.name,
+      shareholder_name: sh.shareholder_name,
+      share_percentage: sh.share_percentage,
+      total_profit_received: totalReceived,
+    });
+  }
+
+  const totalPercentage = shareholders.reduce((sum, s) => sum + parseFloat(s.share_percentage || 0), 0);
+  const totalDistributed = shareholders.reduce((sum, s) => sum + s.total_profit_received, 0);
+
+  return { shareholders, total_percentage: totalPercentage, total_distributed: totalDistributed };
+};
+
+
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview };
