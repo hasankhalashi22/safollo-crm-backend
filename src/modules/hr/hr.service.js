@@ -6,7 +6,7 @@ const getEmployees = async () => {
     `SELECT u.id, u.phone, u.is_active, r.label as role_label, r.name as role_name,
             sp.full_name, sp.photo_url, sp.mobile_number, sp.email, sp.joining_date,
             hed.designation, hed.department, hed.reports_to, hed.employment_type,
-            hed.office_start_time, hed.office_end_time, hed.is_remote, hed.basic_salary, hed.status,
+            hed.office_start_time, hed.office_end_time, hed.is_remote, hed.basic_salary, hed.status, hed.position_id,
             mgr.full_name as reports_to_name
      FROM users u
      LEFT JOIN roles r ON r.id = u.role_id
@@ -22,7 +22,7 @@ const getEmployees = async () => {
 const upsertEmployeeDetails = async (userId, data) => {
   const {
     designation, department, reports_to, employment_type,
-    office_start_time, office_end_time, is_remote, basic_salary, status
+    office_start_time, office_end_time, is_remote, basic_salary, status, position_id
   } = data;
 
   const existing = await query('SELECT id FROM hr_employee_details WHERE user_id = $1', [userId]);
@@ -32,22 +32,22 @@ const upsertEmployeeDetails = async (userId, data) => {
       `UPDATE hr_employee_details SET
          designation = $1, department = $2, reports_to = $3, employment_type = $4,
          office_start_time = $5, office_end_time = $6, is_remote = $7, basic_salary = $8,
-         status = $9, updated_at = NOW()
-       WHERE user_id = $10 RETURNING *`,
+         status = $9, position_id = $10, updated_at = NOW()
+       WHERE user_id = $11 RETURNING *`,
       [designation || null, department || null, reports_to || null, employment_type || 'full_time',
        office_start_time || '09:00', office_end_time || '17:00', is_remote || false,
-       basic_salary || null, status || 'active', userId]
+       basic_salary || null, status || 'active', position_id || null, userId]
     );
     return result.rows[0];
   } else {
     const result = await query(
       `INSERT INTO hr_employee_details
          (user_id, designation, department, reports_to, employment_type,
-          office_start_time, office_end_time, is_remote, basic_salary, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+          office_start_time, office_end_time, is_remote, basic_salary, status, position_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [userId, designation || null, department || null, reports_to || null, employment_type || 'full_time',
        office_start_time || '09:00', office_end_time || '17:00', is_remote || false,
-       basic_salary || null, status || 'active']
+       basic_salary || null, status || 'active', position_id || null]
     );
     return result.rows[0];
   }
