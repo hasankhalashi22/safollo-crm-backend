@@ -163,6 +163,35 @@ await pool.query('ALTER TABLE acc_accounts ADD COLUMN IF NOT EXISTS shareholder_
     console.log('✅ Shareholder tracking ready');
 
 await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_employee_details (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) UNIQUE,
+        designation VARCHAR(100),
+        department VARCHAR(100),
+        reports_to UUID REFERENCES users(id),
+        employment_type VARCHAR(30) DEFAULT 'full_time',
+        office_start_time TIME DEFAULT '09:00',
+        office_end_time TIME DEFAULT '17:00',
+        is_remote BOOLEAN DEFAULT FALSE,
+        basic_salary NUMERIC(12,2),
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_notices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(200) NOT NULL,
+        content TEXT NOT NULL,
+        attachment_url TEXT,
+        created_by UUID REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✅ HR module schema ready');
+
+await pool.query(`
       CREATE TABLE IF NOT EXISTS acc_settings (
         key VARCHAR(50) PRIMARY KEY,
         value VARCHAR(50) NOT NULL,

@@ -15,6 +15,7 @@ const salesRoutes       = require('./modules/sales/sales.routes');
 const paymentsRoutes    = require('./modules/payments/payments.routes');
 const reportsRoutes     = require('./modules/reports/reports.routes');
 const fieldConfigRoutes = require('./modules/field-configs/field-configs.routes');
+const hrRoutes = require('./modules/hr/hr.routes');
 
 const app = express();
 
@@ -74,6 +75,7 @@ app.use('/api/approvals', require('./modules/approvals/approvals.routes'));
 app.use('/api/notifications', require('./modules/notifications/notifications.routes'));
 app.use('/api/accounting', require('./modules/accounting/accounting.routes'));
 app.use('/api/book', require('./modules/sales/book.routes'));
+app.use('/api/hr', hrRoutes);
 
 // ── Error handling ────────────────────────────────────────
 app.use(notFound);
