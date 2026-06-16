@@ -41,6 +41,7 @@ router.post('/card-statements/analyze', uploadMemory.single('statement'), statem
 router.post('/card-statements/confirm', uploadMemory.any(), statementController.confirmStatement);
 router.post('/transactions/distribute-profit', transactionsController.distributeProfitToShareholders);
 router.get('/shareholders', accountsController.getShareholdersOverview);
+router.get('/journal', accountsController.getGeneralJournal);
 
 router.post('/transactions', uploadPayment.single('proof'), transactionsController.createTransaction);
 router.get('/transactions', transactionsController.getTransactions);

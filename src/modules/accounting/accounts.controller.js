@@ -119,4 +119,12 @@ const getShareholdersOverview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview };
+const getGeneralJournal = async (req, res, next) => {
+  try {
+    const { date_from, date_to } = req.query;
+    const result = await accountsService.getGeneralJournal(date_from, date_to);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };

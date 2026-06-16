@@ -799,5 +799,28 @@ const getShareholdersOverview = async () => {
   return { shareholders, total_percentage: totalPercentage, total_distributed: totalDistributed };
 };
 
+const getGeneralJournal = async (dateFrom, dateTo) => {
+  const conditions = [];
+  const params = [];
+  let idx = 1;
+  if (dateFrom) { conditions.push(`je.entry_date >= $${idx++}`); params.push(dateFrom); }
+  if (dateTo) { conditions.push(`je.entry_date <= $${idx++}`); params.push(dateTo); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview };
+  const result = await query(
+    `SELECT je.id, je.entry_date, je.entry_type, je.amount,
+            t.id as transaction_id, t.transaction_type, t.description, t.reference_no, t.source,
+            a.name as account_name, a.code as account_code
+     FROM acc_journal_entries je
+     JOIN acc_transactions t ON t.id = je.transaction_id
+     JOIN acc_accounts a ON a.id = je.account_id
+     ${where}
+     ORDER BY je.entry_date DESC, t.created_at DESC, je.entry_type ASC`,
+    params
+  );
+
+  return { entries: result.rows };
+};
+
+
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
