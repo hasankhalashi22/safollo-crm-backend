@@ -179,6 +179,18 @@ await pool.query(`
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+
+await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_positions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(150) NOT NULL,
+        parent_position_id UUID REFERENCES hr_positions(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`ALTER TABLE hr_employee_details ADD COLUMN IF NOT EXISTS position_id UUID REFERENCES hr_positions(id)`);
+    console.log('✅ HR positions table ready');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS hr_notices (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

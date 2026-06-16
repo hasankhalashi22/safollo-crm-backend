@@ -91,7 +91,59 @@ const deleteNotice = async (id) => {
   await query('DELETE FROM hr_notices WHERE id = $1', [id]);
 };
 
+// Positions (Organogram structure)
+const getPositions = async () => {
+  const positionsResult = await query(
+    `SELECT id, title, parent_position_id FROM hr_positions ORDER BY created_at ASC`
+  );
+  const employeesResult = await query(
+    `SELECT hed.position_id, sp.full_name, u.id as user_id
+     FROM hr_employee_details hed
+     JOIN users u ON u.id = hed.user_id
+     LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+     WHERE hed.position_id IS NOT NULL AND u.is_active = TRUE`
+  );
+
+  const positions = positionsResult.rows.map(p => ({
+    ...p,
+    employees: employeesResult.rows.filter(e => e.position_id === p.id).map(e => ({ user_id: e.user_id, full_name: e.full_name })),
+  }));
+
+  return positions;
+};
+
+const createPosition = async (data) => {
+  const { title, parent_position_id } = data;
+  if (!title) throw { statusCode: 400, message: 'পদের নাম দিন' };
+  const result = await query(
+    `INSERT INTO hr_positions (title, parent_position_id) VALUES ($1, $2) RETURNING *`,
+    [title, parent_position_id || null]
+  );
+  return result.rows[0];
+};
+
+const updatePosition = async (id, data) => {
+  const { title } = data;
+  const result = await query(
+    `UPDATE hr_positions SET title = $1 WHERE id = $2 RETURNING *`,
+    [title, id]
+  );
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'পদ পাওয়া যায়নি' };
+  return result.rows[0];
+};
+
+const deletePosition = async (id) => {
+  const children = await query(`SELECT id FROM hr_positions WHERE parent_position_id = $1`, [id]);
+  if (children.rows.length > 0) {
+    throw { statusCode: 400, message: 'এই পদের নিচে আরও পদ আছে, আগে সেগুলো ডিলিট করুন' };
+  }
+  await query(`UPDATE hr_employee_details SET position_id = NULL WHERE position_id = $1`, [id]);
+  await query(`DELETE FROM hr_positions WHERE id = $1`, [id]);
+};
+
+
 module.exports = {
   getEmployees, upsertEmployeeDetails, getOrganogram,
   getNotices, createNotice, deleteNotice,
+  getPositions, createPosition, updatePosition, deletePosition,
 };

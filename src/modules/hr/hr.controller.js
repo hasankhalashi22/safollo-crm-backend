@@ -42,7 +42,36 @@ const deleteNotice = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getPositions = async (req, res, next) => {
+  try {
+    const result = await hrService.getPositions();
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const createPosition = async (req, res, next) => {
+  try {
+    const result = await hrService.createPosition(req.body);
+    res.status(201).json({ success: true, data: result, message: 'Position created' });
+  } catch (err) { next(err); }
+};
+
+const updatePosition = async (req, res, next) => {
+  try {
+    const result = await hrService.updatePosition(req.params.id, req.body);
+    res.json({ success: true, data: result, message: 'Position updated' });
+  } catch (err) { next(err); }
+};
+
+const deletePosition = async (req, res, next) => {
+  try {
+    await hrService.deletePosition(req.params.id);
+    res.json({ success: true, message: 'Position deleted' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getEmployees, upsertEmployeeDetails, getOrganogram,
   getNotices, createNotice, deleteNotice,
+  getPositions, createPosition, updatePosition, deletePosition,
 };
