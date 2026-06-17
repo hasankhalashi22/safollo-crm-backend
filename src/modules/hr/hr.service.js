@@ -1,4 +1,5 @@
 const { query } = require('../../config/database');
+const usersService = require('../users/users.service');
 
 // ===== Employee Management (hr_employees master table) =====
 
@@ -46,14 +47,29 @@ const getUnlinkedCrmUsers = async () => {
   return result.rows;
 };
 
-const createEmployee = async (data) => {
+const createEmployee = async (data, createdBy) => {
   const {
     full_name, phone, email, user_id, position_id, designation, department,
     reports_to, employment_type, office_start_time, office_end_time, is_remote,
-    weekly_off_day, basic_salary, status, joining_date
+    weekly_off_day, basic_salary, status, joining_date,
+    grant_crm_access, crm_role_id, crm_manager_id
   } = data;
 
   if (!full_name) throw { statusCode: 400, message: 'নাম দিন' };
+
+  let finalUserId = user_id || null;
+
+  // If granting CRM access for a brand-new employee (not importing an existing CRM user)
+  if (grant_crm_access && !finalUserId) {
+    if (!phone || !crm_role_id) {
+      throw { statusCode: 400, message: 'CRM access দেওয়ার জন্য ফোন নম্বর ও role আবশ্যক' };
+    }
+    const newUser = await usersService.createUser(
+      { phone, role_id: crm_role_id, manager_id: crm_manager_id || null, joining_date: joining_date || null },
+      createdBy
+    );
+    finalUserId = newUser.id;
+  }
 
   const result = await query(
     `INSERT INTO hr_employees
@@ -62,7 +78,7 @@ const createEmployee = async (data) => {
         weekly_off_day, basic_salary, status, joining_date)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      RETURNING *`,
-    [full_name, phone || null, email || null, user_id || null, position_id || null,
+    [full_name, phone || null, email || null, finalUserId, position_id || null,
      designation || null, department || null, reports_to || null,
      employment_type || 'full_time', office_start_time || '11:00', office_end_time || '21:00',
      is_remote || false, weekly_off_day || null, basic_salary || null,

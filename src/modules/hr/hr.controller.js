@@ -23,7 +23,7 @@ const getUnlinkedCrmUsers = async (req, res, next) => {
 
 const createEmployee = async (req, res, next) => {
   try {
-    const result = await hrService.createEmployee(req.body);
+    const result = await hrService.createEmployee(req.body, req.user.id);
     res.status(201).json({ success: true, data: result, message: 'কর্মী যুক্ত হয়েছে' });
   } catch (err) { next(err); }
 };
