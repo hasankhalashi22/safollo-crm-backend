@@ -96,7 +96,7 @@ const deleteNotice = async (id) => {
 // Positions (Organogram structure)
 const getPositions = async () => {
   const positionsResult = await query(
-    `SELECT id, title, parent_position_id FROM hr_positions ORDER BY created_at ASC`
+    `SELECT id, title, department, parent_position_id FROM hr_positions ORDER BY created_at ASC`
   );
   const employeesResult = await query(
     `SELECT hed.position_id, sp.full_name, u.id as user_id
@@ -115,25 +115,24 @@ const getPositions = async () => {
 };
 
 const createPosition = async (data) => {
-  const { title, parent_position_id } = data;
+  const { title, parent_position_id, department } = data;
   if (!title) throw { statusCode: 400, message: 'পদের নাম দিন' };
   const result = await query(
-    `INSERT INTO hr_positions (title, parent_position_id) VALUES ($1, $2) RETURNING *`,
-    [title, parent_position_id || null]
+    `INSERT INTO hr_positions (title, parent_position_id, department) VALUES ($1, $2, $3) RETURNING *`,
+    [title, parent_position_id || null, department || null]
   );
   return result.rows[0];
 };
 
 const updatePosition = async (id, data) => {
-  const { title } = data;
+  const { title, department } = data;
   const result = await query(
-    `UPDATE hr_positions SET title = $1 WHERE id = $2 RETURNING *`,
-    [title, id]
+    `UPDATE hr_positions SET title = $1, department = $2 WHERE id = $3 RETURNING *`,
+    [title, department || null, id]
   );
   if (result.rows.length === 0) throw { statusCode: 404, message: 'পদ পাওয়া যায়নি' };
   return result.rows[0];
 };
-
 const deletePosition = async (id) => {
   const children = await query(`SELECT id FROM hr_positions WHERE parent_position_id = $1`, [id]);
   if (children.rows.length > 0) {
