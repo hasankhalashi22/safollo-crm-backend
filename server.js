@@ -195,6 +195,61 @@ await pool.query(`ALTER TABLE hr_employee_details ADD COLUMN IF NOT EXISTS weekl
 await pool.query(`ALTER TABLE hr_positions ADD COLUMN IF NOT EXISTS department VARCHAR(100)`);
     console.log('✅ HR positions table ready');
 
+await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_employees (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        full_name VARCHAR(150) NOT NULL,
+        phone VARCHAR(20),
+        email VARCHAR(150),
+        photo_url TEXT,
+        position_id UUID REFERENCES hr_positions(id),
+        designation VARCHAR(150),
+        department VARCHAR(100),
+        reports_to UUID REFERENCES hr_employees(id),
+        employment_type VARCHAR(30) DEFAULT 'full_time',
+        office_start_time TIME DEFAULT '11:00',
+        office_end_time TIME DEFAULT '21:00',
+        is_remote BOOLEAN DEFAULT FALSE,
+        weekly_off_day VARCHAR(20),
+        basic_salary NUMERIC(12,2),
+        status VARCHAR(20) DEFAULT 'active',
+        joining_date DATE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    const migrationCheck = await pool.query('SELECT COUNT(*) FROM hr_employees');
+    if (parseInt(migrationCheck.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO hr_employees
+          (user_id, full_name, phone, email, position_id, designation, department,
+           employment_type, office_start_time, office_end_time, is_remote,
+           weekly_off_day, basic_salary, status, joining_date)
+        SELECT u.id, COALESCE(sp.full_name, u.phone), u.phone, sp.email,
+               hed.position_id, hed.designation, hed.department,
+               hed.employment_type, hed.office_start_time, hed.office_end_time, hed.is_remote,
+               hed.weekly_off_day, hed.basic_salary, hed.status, sp.joining_date
+        FROM users u
+        LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+        LEFT JOIN hr_employee_details hed ON hed.user_id = u.id
+        WHERE u.is_active = TRUE
+      `);
+
+      await pool.query(`
+        UPDATE hr_employees he
+        SET reports_to = mgr.id
+        FROM hr_employee_details hed
+        JOIN hr_employees mgr ON mgr.user_id = hed.reports_to
+        WHERE he.user_id = hed.user_id AND hed.reports_to IS NOT NULL
+      `);
+
+      console.log('✅ Migrated existing employees into hr_employees table');
+    }
+
+    console.log('✅ HR employees master table ready');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS hr_notices (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
