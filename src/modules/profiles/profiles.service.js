@@ -1,6 +1,13 @@
 // profiles.service.js
 const { query } = require('../../config/database');
 const { deleteFile } = require('../../config/cloudinary');
+const checkProfileNotLocked = async (userId) => {
+  const result = await query('SELECT is_locked FROM hr_employees WHERE user_id = $1', [userId]);
+  if (result.rows.length > 0 && result.rows[0].is_locked) {
+    throw { statusCode: 403, message: 'আপনার প্রোফাইল HR দ্বারা লক করা আছে। পরিবর্তনের জন্য HR-এর সাথে যোগাযোগ করুন।' };
+  }
+};
+
 
 const getProfile = async (userId) => {
   const result = await query(
@@ -21,6 +28,7 @@ const getProfile = async (userId) => {
 };
 
 const updateProfile = async (userId, data) => {
+  await checkProfileNotLocked(userId);
   Object.keys(data).forEach(key => { if (data[key] === '') data[key] = null; });
   const fields = Object.keys(data);
   if (fields.length === 0) {
@@ -53,6 +61,7 @@ const updateProfile = async (userId, data) => {
 };
 
 const uploadPhoto = async (userId, file) => {
+  await checkProfileNotLocked(userId);
   // Delete old photo if exists
   const existing = await query('SELECT photo_public_id FROM staff_profiles WHERE user_id = $1', [userId]);
   if (existing.rows[0]?.photo_public_id) {
@@ -69,6 +78,7 @@ const uploadPhoto = async (userId, file) => {
 };
 
 const uploadNid = async (userId, file) => {
+  await checkProfileNotLocked(userId);
   const existing = await query('SELECT nid_image_public_id FROM staff_profiles WHERE user_id = $1', [userId]);
   if (existing.rows[0]?.nid_image_public_id) {
     await deleteFile(existing.rows[0].nid_image_public_id);
@@ -84,6 +94,7 @@ const uploadNid = async (userId, file) => {
 };
 
 const uploadSignature = async (userId, file) => {
+  await checkProfileNotLocked(userId);
   const existing = await query('SELECT signature_public_id FROM staff_profiles WHERE user_id = $1', [userId]);
   if (existing.rows[0]?.signature_public_id) {
     await deleteFile(existing.rows[0].signature_public_id);
