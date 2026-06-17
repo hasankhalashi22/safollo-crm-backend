@@ -189,6 +189,9 @@ await pool.query(`
       )
     `);
     await pool.query(`ALTER TABLE hr_employee_details ADD COLUMN IF NOT EXISTS position_id UUID REFERENCES hr_positions(id)`);
+await pool.query(`ALTER TABLE hr_employee_details ADD COLUMN IF NOT EXISTS weekly_off_day VARCHAR(20)`);
+    await pool.query(`ALTER TABLE hr_employee_details ALTER COLUMN office_start_time SET DEFAULT '11:00'`);
+    await pool.query(`ALTER TABLE hr_employee_details ALTER COLUMN office_end_time SET DEFAULT '21:00'`);
     console.log('✅ HR positions table ready');
 
     await pool.query(`
