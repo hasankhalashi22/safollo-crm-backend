@@ -248,6 +248,59 @@ await pool.query(`
       console.log('✅ Migrated existing employees into hr_employees table');
     }
 
+await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS father_name VARCHAR(100)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS mother_name VARCHAR(100)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS date_of_birth DATE`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS blood_group VARCHAR(10)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS gender VARCHAR(20)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS guardian_mobile VARCHAR(20)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS guardian_relation VARCHAR(50)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS present_address TEXT`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS permanent_address TEXT`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS education_level VARCHAR(100)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS education_details TEXT`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS nid_number VARCHAR(30)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS nid_image_url TEXT`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS nid_image_public_id VARCHAR(150)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS photo_url TEXT`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS photo_public_id VARCHAR(150)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS signature_url TEXT`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS signature_public_id VARCHAR(150)`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE`);
+
+    // One-time: copy full profile data from staff_profiles for CRM-linked employees
+    const profileMigrationCheck = await pool.query(
+      `SELECT COUNT(*) FROM hr_employees WHERE user_id IS NOT NULL AND nid_number IS NULL`
+    );
+    if (parseInt(profileMigrationCheck.rows[0].count) > 0) {
+      await pool.query(`
+        UPDATE hr_employees he
+        SET father_name = sp.father_name,
+            mother_name = sp.mother_name,
+            date_of_birth = sp.date_of_birth,
+            blood_group = sp.blood_group,
+            gender = sp.gender,
+            guardian_mobile = sp.guardian_mobile,
+            guardian_relation = sp.guardian_relation,
+            present_address = sp.present_address,
+            permanent_address = sp.permanent_address,
+            education_level = sp.education_level,
+            education_details = sp.education_details,
+            nid_number = sp.nid_number,
+            nid_image_url = sp.nid_image_url,
+            nid_image_public_id = sp.nid_image_public_id,
+            photo_url = sp.photo_url,
+            photo_public_id = sp.photo_public_id,
+            signature_url = sp.signature_url,
+            signature_public_id = sp.signature_public_id
+        FROM staff_profiles sp
+        WHERE sp.user_id = he.user_id
+      `);
+      console.log('✅ Migrated full profile data from staff_profiles into hr_employees');
+    }
+
+    console.log('✅ HR employee full profile fields ready');
+
     console.log('✅ HR employees master table ready');
 
     await pool.query(`
