@@ -139,7 +139,7 @@ const loginWithPassword = async (phone, password, deviceInfo) => {
     throw { statusCode: 403, message: 'আপনার অ্যাকাউন্ট নিষ্ক্রিয় করা হয়েছে' };
   }
 
-  if (user.is_first_login || !user.password) {
+ if (!user.password) {
     throw { statusCode: 428, message: 'প্রথমবার লগইন। OTP দিয়ে verify করুন।', is_first_login: true };
   }
 
@@ -156,7 +156,7 @@ const loginWithPassword = async (phone, password, deviceInfo) => {
     [user.id, token, deviceInfo || null, expiresAt]
   );
 
-  return {
+return {
     token,
     user: {
       id: user.id,
@@ -166,7 +166,7 @@ const loginWithPassword = async (phone, password, deviceInfo) => {
       role_level: user.role_level,
       full_name: user.full_name,
       is_profile_complete: user.is_profile_complete,
-      is_first_login: false,
+      is_first_login: user.is_first_login,
     },
   };
 };
@@ -184,8 +184,8 @@ const changePassword = async (userId, oldPassword, newPassword) => {
     if (!isMatch) throw { statusCode: 401, message: 'পুরনো পাসওয়ার্ড ভুল' };
   }
 
-  const hashed = await bcrypt.hash(newPassword, 10);
-  await query('UPDATE users SET password = $1 WHERE id = $2', [hashed, userId]);
+const hashed = await bcrypt.hash(newPassword, 10);
+  await query('UPDATE users SET password = $1, is_first_login = FALSE WHERE id = $2', [hashed, userId]);
 
   return { success: true, message: 'পাসওয়ার্ড পরিবর্তন হয়েছে' };
 };

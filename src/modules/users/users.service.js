@@ -1,14 +1,20 @@
 const { query } = require('../../config/database');
 
 // Create new user (admin only)
+const bcrypt = require('bcryptjs');
+
+const DEFAULT_PASSWORD = '1234';
+
 const createUser = async (data, createdBy) => {
   const { phone, role_id, manager_id, joining_date } = data;
 
+  const hashedDefaultPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+
   const result = await query(
-    `INSERT INTO users (phone, role_id, manager_id, joining_date, created_by)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO users (phone, role_id, manager_id, joining_date, created_by, password, is_first_login)
+     VALUES ($1, $2, $3, $4, $5, $6, TRUE)
      RETURNING id, phone, role_id, is_active, joining_date, created_at`,
-    [phone, role_id, manager_id || null, joining_date || null, createdBy]
+    [phone, role_id, manager_id || null, joining_date || null, createdBy, hashedDefaultPassword]
   );
 
   // Create empty profile
