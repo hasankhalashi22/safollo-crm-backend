@@ -30,7 +30,7 @@ const createEmployee = async (req, res, next) => {
 
 const updateEmployee = async (req, res, next) => {
   try {
-    const result = await hrService.updateEmployee(req.params.id, req.body);
+    const result = await hrService.updateEmployee(req.params.id, { ...req.body, __fromHR: true });
     res.json({ success: true, data: result, message: 'তথ্য আপডেট হয়েছে' });
   } catch (err) { next(err); }
 };
@@ -98,8 +98,39 @@ const deleteNotice = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const uploadPhoto = async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+    const result = await hrService.updateEmployee(req.params.id, {
+      photo_url: req.file.path, photo_public_id: req.file.filename, __fromHR: true
+    });
+    res.json({ success: true, data: result, message: 'ছবি আপলোড হয়েছে' });
+  } catch (err) { next(err); }
+};
+
+const uploadNid = async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+    const result = await hrService.updateEmployee(req.params.id, {
+      nid_image_url: req.file.path, nid_image_public_id: req.file.filename, __fromHR: true
+    });
+    res.json({ success: true, data: result, message: 'NID আপলোড হয়েছে' });
+  } catch (err) { next(err); }
+};
+
+const uploadSignature = async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+    const result = await hrService.updateEmployee(req.params.id, {
+      signature_url: req.file.path, signature_public_id: req.file.filename, __fromHR: true
+    });
+    res.json({ success: true, data: result, message: 'স্বাক্ষর আপলোড হয়েছে' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
+  uploadPhoto, uploadNid, uploadSignature,
   getPositions, createPosition, updatePosition, deletePosition,
   getOrganogram,
   getNotices, createNotice, deleteNotice,

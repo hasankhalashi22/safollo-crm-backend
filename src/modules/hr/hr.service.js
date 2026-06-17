@@ -91,10 +91,23 @@ const updateEmployee = async (id, data) => {
   const allowedFields = [
     'full_name', 'phone', 'email', 'position_id', 'designation', 'department',
     'reports_to', 'employment_type', 'office_start_time', 'office_end_time',
-    'is_remote', 'weekly_off_day', 'basic_salary', 'status', 'joining_date'
+    'is_remote', 'weekly_off_day', 'basic_salary', 'status', 'joining_date',
+    'father_name', 'mother_name', 'date_of_birth', 'blood_group', 'gender',
+    'guardian_mobile', 'guardian_relation', 'present_address', 'permanent_address',
+    'education_level', 'education_details', 'nid_number', 'is_locked',
+    'nid_image_url', 'nid_image_public_id', 'photo_url', 'photo_public_id',
+    'signature_url', 'signature_public_id'
   ];
   const numericFields = ['basic_salary'];
-  const dateFields = ['joining_date'];
+  const dateFields = ['joining_date', 'date_of_birth'];
+  const booleanFields = ['is_remote', 'is_locked'];
+
+  // Lock check: if employee is locked, reject updates unless explicitly unlocking
+  const current = await query('SELECT is_locked FROM hr_employees WHERE id = $1', [id]);
+  if (current.rows.length === 0) throw { statusCode: 404, message: 'কর্মী পাওয়া যায়নি' };
+  if (current.rows[0].is_locked && data.is_locked !== false && data.__fromHR !== true) {
+    throw { statusCode: 403, message: 'এই প্রোফাইল লক করা আছে। HR থেকে আনলক করুন।' };
+  }
 
   const fields = [];
   const params = [];
