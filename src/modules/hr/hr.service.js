@@ -12,6 +12,7 @@ const getEmployees = async () => {
      LEFT JOIN hr_employees mgr ON mgr.id = he.reports_to
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
+     WHERE r.name IS DISTINCT FROM 'super_admin'
      ORDER BY he.full_name ASC`
   );
   return result.rows;
@@ -38,6 +39,7 @@ const getUnlinkedCrmUsers = async () => {
      LEFT JOIN staff_profiles sp ON sp.user_id = u.id
      LEFT JOIN roles r ON r.id = u.role_id
      WHERE u.is_active = TRUE
+       AND r.name IS DISTINCT FROM 'super_admin'
        AND u.id NOT IN (SELECT user_id FROM hr_employees WHERE user_id IS NOT NULL)
      ORDER BY sp.full_name ASC NULLS LAST`
   );
@@ -114,9 +116,15 @@ const getPositions = async () => {
   const positionsResult = await query(
     `SELECT id, title, department, parent_position_id FROM hr_positions ORDER BY created_at ASC`
   );
-  const employeesResult = await query(
-    `SELECT id, full_name, position_id FROM hr_employees WHERE position_id IS NOT NULL AND status = 'active'`
+ const employeesResult = await query(
+    `SELECT he.id, he.full_name, he.position_id
+     FROM hr_employees he
+     LEFT JOIN users u ON u.id = he.user_id
+     LEFT JOIN roles r ON r.id = u.role_id
+     WHERE he.position_id IS NOT NULL AND he.status = 'active'
+       AND r.name IS DISTINCT FROM 'super_admin'`
   );
+
 
   const positions = positionsResult.rows.map(p => ({
     ...p,
@@ -159,10 +167,12 @@ const deletePosition = async (id) => {
 
 const getOrganogram = async () => {
   const result = await query(
-    `SELECT id, full_name, designation, department, reports_to
-     FROM hr_employees
-     WHERE status = 'active'
-     ORDER BY full_name ASC`
+    `SELECT he.id, he.full_name, he.designation, he.department, he.reports_to
+     FROM hr_employees he
+     LEFT JOIN users u ON u.id = he.user_id
+     LEFT JOIN roles r ON r.id = u.role_id
+     WHERE he.status = 'active' AND r.name IS DISTINCT FROM 'super_admin'
+     ORDER BY he.full_name ASC`
   );
   return result.rows;
 };
