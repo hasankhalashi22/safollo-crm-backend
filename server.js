@@ -301,6 +301,44 @@ await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS father_name 
 
     console.log('✅ HR employee full profile fields ready');
 
+// One-time fix: existing users (created before the default-password feature) who already
+    // have a working password should not be forced through the new password-change screen.
+    await pool.query(`
+      UPDATE users
+      SET is_first_login = FALSE
+      WHERE password IS NOT NULL
+        AND created_at < '2026-06-18'
+    `);
+    console.log('✅ Cleared is_first_login flag for pre-existing users with passwords');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_employee_module_access (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        module_key VARCHAR(50) NOT NULL,
+        role_key VARCHAR(50) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(employee_id, module_key)
+      )
+    `);
+
+    const accessMigrationCheck = await pool.query(`SELECT COUNT(*) FROM hr_employee_module_access WHERE module_key = 'crm'`);
+    if (parseInt(accessMigrationCheck.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO hr_employee_module_access (employee_id, module_key, role_key)
+        SELECT he.id, 'crm', r.name
+        FROM hr_employees he
+        JOIN users u ON u.id = he.user_id
+        JOIN roles r ON r.id = u.role_id
+        WHERE r.name IS DISTINCT FROM 'super_admin'
+        ON CONFLICT (employee_id, module_key) DO NOTHING
+      `);
+      console.log('✅ Mirrored existing CRM roles into hr_employee_module_access');
+    }
+
+    console.log('✅ HR employee module access table ready');
+
     console.log('✅ HR employees master table ready');
 
     await pool.query(`
