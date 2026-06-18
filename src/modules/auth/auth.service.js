@@ -1,4 +1,5 @@
 const { query } = require('../../config/database');
+const hrService = require('../hr/hr.service');
 const { generateToken } = require('../../utils/jwt');
 const { generateOTP, sendSMS } = require('../../utils/sms');
 const bcrypt = require('bcryptjs');
@@ -73,6 +74,14 @@ const verifyOtp = async (phone, code, deviceInfo) => {
     [user.id, token, deviceInfo || null, expiresAt]
   );
 
+  const otpModuleAccessResult = await query(
+    `SELECT ma.module_key, ma.role_key
+     FROM hr_employee_module_access ma
+     JOIN hr_employees he ON he.id = ma.employee_id
+     WHERE he.user_id = $1`,
+    [user.id]
+  );
+
   return {
     token,
     user: {
@@ -84,6 +93,7 @@ const verifyOtp = async (phone, code, deviceInfo) => {
       full_name: user.full_name,
       is_profile_complete: user.is_profile_complete,
       is_first_login: user.is_first_login,
+      module_access: otpModuleAccessResult.rows,
     },
   };
 };
@@ -156,7 +166,15 @@ const loginWithPassword = async (phone, password, deviceInfo) => {
     [user.id, token, deviceInfo || null, expiresAt]
   );
 
-return {
+const moduleAccessResult = await query(
+    `SELECT ma.module_key, ma.role_key
+     FROM hr_employee_module_access ma
+     JOIN hr_employees he ON he.id = ma.employee_id
+     WHERE he.user_id = $1`,
+    [user.id]
+  );
+
+  return {
     token,
     user: {
       id: user.id,
@@ -167,6 +185,7 @@ return {
       full_name: user.full_name,
       is_profile_complete: user.is_profile_complete,
       is_first_login: user.is_first_login,
+      module_access: moduleAccessResult.rows,
     },
   };
 };
