@@ -25,8 +25,26 @@ const getEmployees = async () => {
      WHERE r.name IS DISTINCT FROM 'super_admin'
      ORDER BY position_tier ASC, he.full_name ASC`
   );
-  return result.rows;
+
+  const employees = result.rows;
+  if (employees.length === 0) return employees;
+
+  const accessResult = await query(
+    `SELECT employee_id, module_key, role_key FROM hr_employee_module_access`
+  );
+
+  const accessByEmployee = {};
+  accessResult.rows.forEach(a => {
+    if (!accessByEmployee[a.employee_id]) accessByEmployee[a.employee_id] = [];
+    accessByEmployee[a.employee_id].push({ module_key: a.module_key, role_key: a.role_key });
+  });
+
+  return employees.map(emp => ({
+    ...emp,
+    module_access: accessByEmployee[emp.id] || [],
+  }));
 };
+
 const getEmployeeById = async (id) => {
   const result = await query(
     `SELECT he.*, pos.title as position_title, mgr.full_name as reports_to_name
