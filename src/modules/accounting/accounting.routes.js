@@ -4,7 +4,7 @@ const accountsController = require('./accounts.controller');
 const transactionsController = require('./transactions.controller');
 const dashboardController = require('./dashboard.controller');
 const cronController = require('./cron.controller');
-const { authenticate, authorize } = require('../../middleware/authenticate');
+const { authenticate, authorizeModule } = require('../../middleware/authenticate');
 const { uploadPayment } = require('../../config/cloudinary');
 const multer = require('multer');
 const statementController = require('./statement.controller');
@@ -16,7 +16,7 @@ router.get('/cron/bkash-settlement', cronController.runBkashSettlement);
 router.get('/cron/rocket-settlement', cronController.runRocketSettlement);
 
 router.use(authenticate);
-router.use(authorize('super_admin'));
+router.use(authorizeModule('accounting'));
 router.get('/settings', cronController.getSettings);
 router.patch('/settings', cronController.updateSetting);
 

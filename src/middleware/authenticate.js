@@ -47,6 +47,13 @@ const authenticate = async (req, res, next) => {
       'SELECT full_name FROM staff_profiles WHERE user_id = $1',
       [session.user_id]
     );
+const moduleAccessResult = await query(
+      `SELECT ma.module_key, ma.role_key
+       FROM hr_employee_module_access ma
+       JOIN hr_employees he ON he.id = ma.employee_id
+       WHERE he.user_id = $1`,
+      [session.user_id]
+    );
 
     req.user = {
       id:          session.user_id,
@@ -57,6 +64,7 @@ const authenticate = async (req, res, next) => {
       manager_id:  session.manager_id,
       full_name:   profileResult.rows[0]?.full_name || null,
       phone:       session.phone,
+      module_access: moduleAccessResult.rows,
     };
 
     next();
@@ -143,4 +151,26 @@ const hasPermission = (permission) => {
   };
 };
 
-module.exports = { authenticate, authorize, authorizeEdit, authorizeLevel, hasPermission };
+// Module-based authorization: super_admin always passes; otherwise check hr_employee_module_access
+const authorizeModule = (moduleKey, minRoles = ['viewer', 'editor', 'admin', 'hr_manager']) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'অননুমোদিত' });
+    }
+
+    if (req.user.role === 'super_admin') return next();
+
+    const access = (req.user.module_access || []).find(a => a.module_key === moduleKey);
+    if (!access || !minRoles.includes(access.role_key)) {
+      return res.status(403).json({
+        success: false,
+        message: 'এই কাজের অনুমতি আপনার নেই',
+      });
+    }
+
+    req.moduleRole = access.role_key; // available to controllers if needed
+    next();
+  };
+};
+
+module.exports = { authenticate, authorize, authorizeEdit, authorizeLevel, hasPermission, authorizeModule };
