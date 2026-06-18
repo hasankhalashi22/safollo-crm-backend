@@ -281,6 +281,7 @@ const setEmployeeModuleAccess = async (employeeId, accessList) => {
 
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
+  getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition,
   getOrganogram,
   getNotices, createNotice, deleteNotice,
