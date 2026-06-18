@@ -339,6 +339,107 @@ await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS father_name 
 
     console.log('✅ HR employee module access table ready');
 
+// ===== Leave Management =====
+
+    // Leave Types (flexible, HR-managed)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_leave_types (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL,
+        name_bn VARCHAR(100) NOT NULL,
+        code VARCHAR(20) NOT NULL UNIQUE,
+        annual_quota_days NUMERIC(5,1) DEFAULT 0,
+        is_paid BOOLEAN DEFAULT TRUE,
+        applicable_to VARCHAR(20) DEFAULT 'full_time',
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Seed default leave types if empty
+    const leaveTypeCheck = await pool.query('SELECT COUNT(*) FROM hr_leave_types');
+    if (parseInt(leaveTypeCheck.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO hr_leave_types (name, name_bn, code, annual_quota_days, is_paid, applicable_to) VALUES
+        ('Casual Leave', 'নিত্য নৈমিত্তিক ছুটি', 'CL', 10, TRUE, 'full_time'),
+        ('Medical Leave', 'চিকিৎসা ছুটি', 'ML', 14, TRUE, 'full_time'),
+        ('Annual/Earned Leave', 'অর্জিত ছুটি', 'AL', 15, TRUE, 'full_time'),
+        ('Study Leave', 'শিক্ষা ছুটি', 'SL', 30, TRUE, 'full_time'),
+        ('Unpaid Leave', 'আনপেইড লিভ', 'UL', 0, FALSE, 'all'),
+        ('Extraordinary Leave', 'অসাধারণ ছুটি', 'EL', 0, FALSE, 'all')
+      `);
+      console.log('✅ Default leave types seeded');
+    }
+
+    // Leave Policy (editable)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_leave_policies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL DEFAULT 'Default Policy',
+        is_active BOOLEAN DEFAULT TRUE,
+        half_day_max_hours NUMERIC(4,1) DEFAULT 4,
+        short_leave_chain JSONB DEFAULT '["check", "approval"]',
+        full_leave_chain JSONB DEFAULT '["check", "consent", "approval"]',
+        check_position_id UUID REFERENCES hr_positions(id),
+        consent_position_id UUID REFERENCES hr_positions(id),
+        approval_position_id UUID REFERENCES hr_positions(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    const policyCheck = await pool.query('SELECT COUNT(*) FROM hr_leave_policies');
+    if (parseInt(policyCheck.rows[0].count) === 0) {
+      await pool.query(`INSERT INTO hr_leave_policies (name) VALUES ('Default Policy')`);
+      console.log('✅ Default leave policy created');
+    }
+
+    // Leave Balances (per employee per leave type per year)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_leave_balances (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        leave_type_id UUID NOT NULL REFERENCES hr_leave_types(id) ON DELETE CASCADE,
+        year INTEGER NOT NULL DEFAULT EXTRACT(YEAR FROM NOW()),
+        total_days NUMERIC(5,1) DEFAULT 0,
+        used_days NUMERIC(5,1) DEFAULT 0,
+        UNIQUE(employee_id, leave_type_id, year)
+      )
+    `);
+
+    // Leave Applications
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_leave_applications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        leave_type_id UUID NOT NULL REFERENCES hr_leave_types(id),
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        duration_days NUMERIC(5,1) NOT NULL,
+        is_half_day BOOLEAN DEFAULT FALSE,
+        reason TEXT,
+        status VARCHAR(30) DEFAULT 'pending_check',
+        check_by UUID REFERENCES hr_employees(id),
+        check_at TIMESTAMPTZ,
+        check_note TEXT,
+        consent_by UUID REFERENCES hr_employees(id),
+        consent_at TIMESTAMPTZ,
+        consent_note TEXT,
+        consent_action VARCHAR(20),
+        approval_by UUID REFERENCES hr_employees(id),
+        approval_at TIMESTAMPTZ,
+        approval_note TEXT,
+        approval_action VARCHAR(20),
+        modified_start_date DATE,
+        modified_end_date DATE,
+        modified_duration_days NUMERIC(5,1),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    console.log('✅ Leave management tables ready');
+
     console.log('✅ HR employees master table ready');
 
     await pool.query(`
