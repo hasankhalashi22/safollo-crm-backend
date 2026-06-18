@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const hrController = require('./hr.controller');
-const { authenticate } = require('../../middleware/authenticate');
+const { authenticate, authorizeModule } = require('../../middleware/authenticate');
 const { uploadProfile, uploadNid, uploadSignature } = require('../../config/cloudinary');
 
 router.use(authenticate);
+router.use(authorizeModule('hr'));
 
 router.get('/employees', hrController.getEmployees);
 router.get('/employees/unlinked-crm-users', hrController.getUnlinkedCrmUsers);
