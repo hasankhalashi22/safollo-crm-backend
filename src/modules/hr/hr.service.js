@@ -5,20 +5,28 @@ const usersService = require('../users/users.service');
 
 const getEmployees = async () => {
   const result = await query(
-    `SELECT he.*, pos.title as position_title,
+    `WITH RECURSIVE position_tiers AS (
+       SELECT id, 0 as tier FROM hr_positions WHERE parent_position_id IS NULL
+       UNION ALL
+       SELECT p.id, pt.tier + 1
+       FROM hr_positions p
+       JOIN position_tiers pt ON p.parent_position_id = pt.id
+     )
+     SELECT he.*, pos.title as position_title,
             mgr.full_name as reports_to_name,
-            u.phone as crm_phone, r.label as crm_role_label
+            u.phone as crm_phone, r.label as crm_role_label,
+            COALESCE(pt.tier, 999) as position_tier
      FROM hr_employees he
      LEFT JOIN hr_positions pos ON pos.id = he.position_id
+     LEFT JOIN position_tiers pt ON pt.id = he.position_id
      LEFT JOIN hr_employees mgr ON mgr.id = he.reports_to
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
      WHERE r.name IS DISTINCT FROM 'super_admin'
-     ORDER BY he.full_name ASC`
+     ORDER BY position_tier ASC, he.full_name ASC`
   );
   return result.rows;
 };
-
 const getEmployeeById = async (id) => {
   const result = await query(
     `SELECT he.*, pos.title as position_title, mgr.full_name as reports_to_name
