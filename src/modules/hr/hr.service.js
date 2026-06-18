@@ -240,6 +240,45 @@ const deleteNotice = async (id) => {
   await query('DELETE FROM hr_notices WHERE id = $1', [id]);
 };
 
+// ===== Module Access (central role/permission assignment) =====
+
+const getEmployeeModuleAccess = async (employeeId) => {
+  const result = await query(
+    `SELECT module_key, role_key FROM hr_employee_module_access WHERE employee_id = $1`,
+    [employeeId]
+  );
+  return result.rows;
+};
+
+const setEmployeeModuleAccess = async (employeeId, accessList) => {
+  // accessList = [{ module_key, role_key }, ...] — full replace of this employee's access
+  await query('DELETE FROM hr_employee_module_access WHERE employee_id = $1', [employeeId]);
+
+  for (const { module_key, role_key } of accessList) {
+    if (!module_key || !role_key) continue;
+    await query(
+      `INSERT INTO hr_employee_module_access (employee_id, module_key, role_key)
+       VALUES ($1, $2, $3)`,
+      [employeeId, module_key, role_key]
+    );
+  }
+
+  // Special case: if CRM access is being set, also keep the legacy users.role_id in sync
+  // so existing CRM login/authorization (which still reads users.role_id) keeps working.
+  const crmAccess = accessList.find(a => a.module_key === 'crm');
+  const employee = await query('SELECT user_id FROM hr_employees WHERE id = $1', [employeeId]);
+  const userId = employee.rows[0]?.user_id;
+
+  if (userId && crmAccess) {
+    const roleRow = await query('SELECT id FROM roles WHERE name = $1', [crmAccess.role_key]);
+    if (roleRow.rows.length > 0) {
+      await query('UPDATE users SET role_id = $1 WHERE id = $2', [roleRow.rows[0].id, userId]);
+    }
+  }
+
+  return getEmployeeModuleAccess(employeeId);
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   getPositions, createPosition, updatePosition, deletePosition,

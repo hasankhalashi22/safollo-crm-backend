@@ -128,9 +128,24 @@ const uploadSignature = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getEmployeeModuleAccess = async (req, res, next) => {
+  try {
+    const result = await hrService.getEmployeeModuleAccess(req.params.id);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const setEmployeeModuleAccess = async (req, res, next) => {
+  try {
+    const result = await hrService.setEmployeeModuleAccess(req.params.id, req.body.access || []);
+    res.json({ success: true, data: result, message: 'Access updated' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   uploadPhoto, uploadNid, uploadSignature,
+  getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition,
   getOrganogram,
   getNotices, createNotice, deleteNotice,
