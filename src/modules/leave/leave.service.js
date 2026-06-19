@@ -71,7 +71,8 @@ const updateLeavePolicy = async (data) => {
 
 // ===== Leave Balance =====
 const isEligible = (joiningDate, eligibilityMonths) => {
-  if (!joiningDate || !eligibilityMonths) return true; // no joining date on file, or 0-month requirement = always eligible
+  if (!joiningDate) return false; // no joining date on file — cannot verify eligibility, so don't grant it silently
+  if (!eligibilityMonths) return true; // 0-month requirement = always eligible once joining date is known
   const months = (new Date() - new Date(joiningDate)) / (1000 * 60 * 60 * 24 * 30.44);
   return months >= eligibilityMonths;
 };
@@ -337,9 +338,9 @@ const getLeaveRegister = async (year) => {
     await getEmployeeBalances(emp.id, currentYear);
   }
 
-  const result = await query(
-    `SELECT he.id as employee_id, he.full_name, he.phone, he.designation, he.department,
-            lt.id as leave_type_id, lt.name_bn, lt.code, lt.is_paid,
+ const result = await query(
+    `SELECT he.id as employee_id, he.full_name, he.phone, he.designation, he.department, he.joining_date,
+            lt.id as leave_type_id, lt.name_bn, lt.code, lt.is_paid, lt.eligibility_months,
             COALESCE(lb.total_days, 0) as total_days,
             COALESCE(lb.used_days, 0) as used_days,
             COALESCE(lb.total_days, 0) - COALESCE(lb.used_days, 0) as remaining_days
