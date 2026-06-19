@@ -356,7 +356,18 @@ const getLeaveRegister = async (year) => {
   return result.rows;
 };
 const getMyApprovalQueue = async (userId) => {
-  const empResult = await query('SELECT id, position_id FROM hr_employees WHERE user_id = $1', [userId]);
+  // Super admin has no visible hr_employees record by design — use the designated
+  // CEO phone number's employee entry to resolve their position for approval purposes.
+  const userRoleResult = await query(
+    `SELECT r.name as role FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+    [userId]
+  );
+  const isSuperAdmin = userRoleResult.rows[0]?.role === 'super_admin';
+
+  const empResult = isSuperAdmin
+    ? await query(`SELECT id, position_id FROM hr_employees WHERE phone = '01805466911'`)
+    : await query('SELECT id, position_id FROM hr_employees WHERE user_id = $1', [userId]);
+
   if (empResult.rows.length === 0) return [];
   const employee = empResult.rows[0];
 
