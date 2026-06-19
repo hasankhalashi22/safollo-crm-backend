@@ -326,7 +326,7 @@ const processApplication = async (applicationId, action, actorEmployeeId, data =
 const getLeaveRegister = async (year) => {
   const currentYear = year || new Date().getFullYear();
   const result = await query(
-    `SELECT he.id as employee_id, he.full_name, he.designation, he.department,
+   SELECT he.id as employee_id, he.full_name, he.phone, he.designation, he.department,
             lt.id as leave_type_id, lt.name_bn, lt.code, lt.is_paid,
             COALESCE(lb.total_days, 0) as total_days,
             COALESCE(lb.used_days, 0) as used_days,
