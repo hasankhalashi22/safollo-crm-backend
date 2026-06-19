@@ -464,6 +464,16 @@ await pool.query(`ALTER TABLE hr_leave_types ADD COLUMN IF NOT EXISTS eligibilit
     `);
     console.log('✅ Attendance table ready');
 
+// Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
+    const employeeRoleCheck = await pool.query("SELECT id FROM roles WHERE name = 'employee'");
+    if (employeeRoleCheck.rows.length === 0) {
+      await pool.query(
+        `INSERT INTO roles (name, label, level, permissions, is_system)
+         VALUES ('employee', 'Employee (ESS only)', 5, '[]', TRUE)`
+      );
+      console.log('✅ Basic employee role created for ESS portal');
+    }
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS hr_notices (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
