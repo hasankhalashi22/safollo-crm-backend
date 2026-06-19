@@ -134,4 +134,22 @@ const getAllAttendance = async ({ date, employeeId } = {}) => {
 };
 
 const getMonthlySummary = async (employeeId, month, year) => {
-  const m = month ||
+  const m = month || (new Date().getMonth() + 1);
+  const y = year || new Date().getFullYear();
+
+  const result = await query(
+    `SELECT
+       COUNT(*) FILTER (WHERE status = 'present') as present_days,
+       COUNT(*) FILTER (WHERE is_late = TRUE) as late_days,
+       COUNT(*) FILTER (WHERE is_early_leave = TRUE) as early_leave_days,
+       COALESCE(SUM(working_hours), 0) as total_hours
+     FROM hr_attendance
+     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3`,
+    [employeeId, m, y]
+  );
+  return result.rows[0];
+};
+
+module.exports = {
+  checkIn, checkOut, getTodayStatus, getMyAttendance, getAllAttendance, getMonthlySummary,
+};
