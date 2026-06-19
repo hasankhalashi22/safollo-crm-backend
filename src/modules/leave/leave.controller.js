@@ -37,7 +37,7 @@ const updateLeavePolicy = async (req, res, next) => {
 
 const getMyBalances = async (req, res, next) => {
   try {
-    const empResult = await require('../../../config/database').query(
+const empResult = await require('../../config/database').query(
       'SELECT id FROM hr_employees WHERE user_id = $1', [req.user.id]
     );
     if (empResult.rows.length === 0) return res.json({ success: true, data: [] });
