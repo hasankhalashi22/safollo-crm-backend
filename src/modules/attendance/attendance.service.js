@@ -110,13 +110,18 @@ const getMyAttendance = async (employeeId, month, year) => {
   return result.rows;
 };
 
-const getAllAttendance = async ({ date, employeeId } = {}) => {
+const getAllAttendance = async ({ date, dateFrom, dateTo, employeeId, status } = {}) => {
   const conditions = [];
   const params = [];
   let idx = 1;
 
   if (date) { conditions.push(`a.date = $${idx++}`); params.push(date); }
+  if (dateFrom) { conditions.push(`a.date >= $${idx++}`); params.push(dateFrom); }
+  if (dateTo) { conditions.push(`a.date <= $${idx++}`); params.push(dateTo); }
   if (employeeId) { conditions.push(`a.employee_id = $${idx++}`); params.push(employeeId); }
+  if (status === 'late') { conditions.push(`a.is_late = TRUE`); }
+  if (status === 'on_time') { conditions.push(`a.is_late = FALSE`); }
+  if (status === 'absent') { conditions.push(`a.check_in_time IS NULL`); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -127,7 +132,7 @@ const getAllAttendance = async ({ date, employeeId } = {}) => {
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
      ${where ? where + ' AND' : 'WHERE'} r.name IS DISTINCT FROM 'super_admin'
-     ORDER BY a.date DESC, he.full_name ASC`,
+     ORDER BY a.date DESC, a.check_in_time ASC NULLS LAST`,
     params
   );
   return result.rows;

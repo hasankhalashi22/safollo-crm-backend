@@ -49,7 +49,13 @@ const getMyMonthlySummary = async (req, res, next) => {
 
 const getAllAttendance = async (req, res, next) => {
   try {
-    const result = await attendanceService.getAllAttendance({ date: req.query.date, employeeId: req.query.employeeId });
+    const result = await attendanceService.getAllAttendance({
+      date: req.query.date,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+      employeeId: req.query.employeeId,
+      status: req.query.status,
+    });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 };
