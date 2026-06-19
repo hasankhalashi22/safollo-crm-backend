@@ -71,8 +71,8 @@ const updateLeavePolicy = async (data) => {
 
 // ===== Leave Balance =====
 const isEligible = (joiningDate, eligibilityMonths) => {
-  if (!joiningDate) return false; // no joining date on file — cannot verify eligibility, so don't grant it silently
-  if (!eligibilityMonths) return true; // 0-month requirement = always eligible once joining date is known
+  if (!eligibilityMonths) return true; // 0-month requirement = no joining-date dependency, always eligible
+  if (!joiningDate) return false; // requirement exists but no joining date on file — cannot verify, so don't grant it silently
   const months = (new Date() - new Date(joiningDate)) / (1000 * 60 * 60 * 24 * 30.44);
   return months >= eligibilityMonths;
 };
