@@ -106,11 +106,17 @@ const getLeaveRegister = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getMyApprovalQueue = async (req, res, next) => {
+  try {
+    const result = await leaveService.getMyApprovalQueue(req.user.id);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
 
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getMyBalances, getEmployeeBalances, getLeaveRegister, getEmployeeApplications,
+  getMyBalances, getEmployeeBalances, getLeaveRegister, getEmployeeApplications, getMyApprovalQueue,
   applyLeave, getMyApplications, getAllApplications,
   processApplication,
 };

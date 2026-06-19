@@ -355,10 +355,39 @@ const getLeaveRegister = async (year) => {
   );
   return result.rows;
 };
+const getMyApprovalQueue = async (userId) => {
+  const empResult = await query('SELECT id, position_id FROM hr_employees WHERE user_id = $1', [userId]);
+  if (empResult.rows.length === 0) return [];
+  const employee = empResult.rows[0];
+
+  const policy = await getLeavePolicy();
+  if (!policy) return [];
+
+  const stages = [];
+  if (policy.check_position_id && policy.check_position_id === employee.position_id) stages.push('check');
+  if (policy.consent_position_id && policy.consent_position_id === employee.position_id) stages.push('consent');
+  if (policy.approval_position_id && policy.approval_position_id === employee.position_id) stages.push('approval');
+
+  if (stages.length === 0) return [];
+
+  const statuses = stages.map(s => `pending_${s}`);
+  const result = await query(
+    `SELECT la.*,
+            he.full_name as employee_name, he.designation, he.department,
+            lt.name_bn as leave_type_name_bn, lt.code as leave_type_code, lt.is_paid
+     FROM hr_leave_applications la
+     JOIN hr_employees he ON he.id = la.employee_id
+     JOIN hr_leave_types lt ON lt.id = la.leave_type_id
+     WHERE la.status = ANY($1)
+     ORDER BY la.created_at ASC`,
+    [statuses]
+  );
+  return result.rows;
+};
 
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getEmployeeBalances, getLeaveRegister,
+  getEmployeeBalances, getLeaveRegister, getMyApprovalQueue,
   applyLeave, getApplications, processApplication,
 };

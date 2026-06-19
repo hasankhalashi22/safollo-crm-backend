@@ -18,6 +18,7 @@ router.patch('/policy', leaveController.updateLeavePolicy);
 router.get('/my/balances', leaveController.getMyBalances);
 router.get('/my/applications', leaveController.getMyApplications);
 router.post('/my/apply', leaveController.applyLeave);
+router.get('/my/approval-queue', leaveController.getMyApprovalQueue);
 
 // HR admin — all applications
 router.get('/applications', leaveController.getAllApplications);
