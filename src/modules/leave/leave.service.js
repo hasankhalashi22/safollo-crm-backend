@@ -325,8 +325,20 @@ const processApplication = async (applicationId, action, actorEmployeeId, data =
 
 const getLeaveRegister = async (year) => {
   const currentYear = year || new Date().getFullYear();
+
+  // Ensure every active employee has their balances auto-created/synced before reading the register
+  const employeesResult = await query(
+    `SELECT he.id FROM hr_employees he
+     LEFT JOIN users u ON u.id = he.user_id
+     LEFT JOIN roles r ON r.id = u.role_id
+     WHERE he.status != 'terminated' AND r.name IS DISTINCT FROM 'super_admin'`
+  );
+  for (const emp of employeesResult.rows) {
+    await getEmployeeBalances(emp.id, currentYear);
+  }
+
   const result = await query(
-   SELECT he.id as employee_id, he.full_name, he.phone, he.designation, he.department,
+    `SELECT he.id as employee_id, he.full_name, he.phone, he.designation, he.department,
             lt.id as leave_type_id, lt.name_bn, lt.code, lt.is_paid,
             COALESCE(lb.total_days, 0) as total_days,
             COALESCE(lb.used_days, 0) as used_days,
@@ -342,7 +354,6 @@ const getLeaveRegister = async (year) => {
   );
   return result.rows;
 };
-
 
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType,
