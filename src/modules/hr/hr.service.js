@@ -78,7 +78,7 @@ const createEmployee = async (data, createdBy) => {
     full_name, phone, email, user_id, position_id, designation, department,
     reports_to, employment_type, office_start_time, office_end_time, is_remote,
     weekly_off_day, basic_salary, status, joining_date,
-    grant_crm_access, crm_role_id, crm_manager_id
+    grant_crm_access, crm_role_id, crm_manager_id, grant_basic_login
   } = data;
 
   if (!full_name) throw { statusCode: 400, message: 'নাম দিন' };
@@ -97,6 +97,21 @@ const createEmployee = async (data, createdBy) => {
     finalUserId = newUser.id;
   }
 
+  // If granting only basic ESS-portal login (no CRM module access)
+  if (grant_basic_login && !grant_crm_access && !finalUserId) {
+    if (!phone) {
+      throw { statusCode: 400, message: 'ESS Portal access দেওয়ার জন্য ফোন নম্বর আবশ্যক' };
+    }
+    const employeeRole = await query("SELECT id FROM roles WHERE name = 'employee'");
+    if (employeeRole.rows.length === 0) {
+      throw { statusCode: 500, message: 'Employee role পাওয়া যায়নি, আগে server migration নিশ্চিত করুন' };
+    }
+    const newUser = await usersService.createUser(
+      { phone, role_id: employeeRole.rows[0].id, manager_id: null, joining_date: joining_date || null },
+      createdBy
+    );
+    finalUserId = newUser.id;
+  }
   const result = await query(
     `INSERT INTO hr_employees
        (full_name, phone, email, user_id, position_id, designation, department,
