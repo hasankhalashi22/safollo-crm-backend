@@ -53,6 +53,13 @@ const getEmployeeBalances = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getEmployeeApplications = async (req, res, next) => {
+  try {
+    const result = await leaveService.getApplications({ employeeId: req.params.employeeId, year: req.query.year });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
 const applyLeave = async (req, res, next) => {
   try {
     const { query } = require('../../config/database');
@@ -103,7 +110,7 @@ const getLeaveRegister = async (req, res, next) => {
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getMyBalances, getEmployeeBalances, getLeaveRegister,
+  getMyBalances, getEmployeeBalances, getLeaveRegister, getEmployeeApplications,
   applyLeave, getMyApplications, getAllApplications,
   processApplication,
 };
