@@ -92,10 +92,18 @@ const processApplication = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getLeaveRegister = async (req, res, next) => {
+  try {
+    const result = await leaveService.getLeaveRegister(req.query.year);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getMyBalances, getEmployeeBalances,
+  getMyBalances, getEmployeeBalances, getLeaveRegister,
   applyLeave, getMyApplications, getAllApplications,
   processApplication,
 };

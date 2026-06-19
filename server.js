@@ -355,6 +355,7 @@ await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS father_name 
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+await pool.query(`ALTER TABLE hr_leave_types ADD COLUMN IF NOT EXISTS eligibility_months INTEGER DEFAULT 0`);
 
     // Seed default leave types if empty
     const leaveTypeCheck = await pool.query('SELECT COUNT(*) FROM hr_leave_types');

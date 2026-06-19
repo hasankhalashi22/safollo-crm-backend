@@ -7,17 +7,17 @@ const getLeaveTypes = async () => {
 };
 
 const createLeaveType = async (data) => {
-  const { name, name_bn, code, annual_quota_days, is_paid, applicable_to } = data;
+  const { name, name_bn, code, annual_quota_days, is_paid, applicable_to, eligibility_months } = data;
   const result = await query(
-    `INSERT INTO hr_leave_types (name, name_bn, code, annual_quota_days, is_paid, applicable_to)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [name, name_bn, code, annual_quota_days || 0, is_paid !== false, applicable_to || 'full_time']
+    `INSERT INTO hr_leave_types (name, name_bn, code, annual_quota_days, is_paid, applicable_to, eligibility_months)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [name, name_bn, code, annual_quota_days || 0, is_paid !== false, applicable_to || 'full_time', eligibility_months || 0]
   );
   return result.rows[0];
 };
 
 const updateLeaveType = async (id, data) => {
-  const { name, name_bn, annual_quota_days, is_paid, applicable_to, is_active } = data;
+  const { name, name_bn, annual_quota_days, is_paid, applicable_to, is_active, eligibility_months } = data;
   const result = await query(
     `UPDATE hr_leave_types SET
        name = COALESCE($1, name),
@@ -25,9 +25,10 @@ const updateLeaveType = async (id, data) => {
        annual_quota_days = COALESCE($3, annual_quota_days),
        is_paid = COALESCE($4, is_paid),
        applicable_to = COALESCE($5, applicable_to),
-       is_active = COALESCE($6, is_active)
-     WHERE id = $7 RETURNING *`,
-    [name, name_bn, annual_quota_days, is_paid, applicable_to, is_active, id]
+       is_active = COALESCE($6, is_active),
+       eligibility_months = COALESCE($7, eligibility_months)
+     WHERE id = $8 RETURNING *`,
+    [name, name_bn, annual_quota_days, is_paid, applicable_to, is_active, eligibility_months, id]
   );
   return result.rows[0];
 };
@@ -69,15 +70,21 @@ const updateLeavePolicy = async (data) => {
 };
 
 // ===== Leave Balance =====
+const isEligible = (joiningDate, eligibilityMonths) => {
+  if (!joiningDate || !eligibilityMonths) return true; // no joining date on file, or 0-month requirement = always eligible
+  const months = (new Date() - new Date(joiningDate)) / (1000 * 60 * 60 * 24 * 30.44);
+  return months >= eligibilityMonths;
+};
+
 const getEmployeeBalances = async (employeeId, year) => {
   const currentYear = year || new Date().getFullYear();
-  // Auto-create balances for full_time employee if not exist
-  const empResult = await query('SELECT employment_type FROM hr_employees WHERE id = $1', [employeeId]);
+  const empResult = await query('SELECT employment_type, joining_date FROM hr_employees WHERE id = $1', [employeeId]);
   const emp = empResult.rows[0];
 
   if (emp?.employment_type === 'full_time') {
     const types = await query(`SELECT * FROM hr_leave_types WHERE is_active = TRUE AND applicable_to = 'full_time'`);
     for (const t of types.rows) {
+      if (!isEligible(emp.joining_date, t.eligibility_months)) continue; // not yet eligible, skip creating balance
       await query(
         `INSERT INTO hr_leave_balances (employee_id, leave_type_id, year, total_days, used_days)
          VALUES ($1, $2, $3, $4, 0)
@@ -87,9 +94,10 @@ const getEmployeeBalances = async (employeeId, year) => {
     }
   }
 
-  // Also ensure 'all' applicable types exist
+  // Also ensure 'all' applicable types exist (eligibility applies here too)
   const allTypes = await query(`SELECT * FROM hr_leave_types WHERE is_active = TRUE AND applicable_to = 'all'`);
   for (const t of allTypes.rows) {
+    if (!isEligible(emp?.joining_date, t.eligibility_months)) continue;
     await query(
       `INSERT INTO hr_leave_balances (employee_id, leave_type_id, year, total_days, used_days)
        VALUES ($1, $2, $3, 0, 0)
@@ -315,9 +323,30 @@ const processApplication = async (applicationId, action, actorEmployeeId, data =
   return { success: true, new_status: newStatus };
 };
 
+const getLeaveRegister = async (year) => {
+  const currentYear = year || new Date().getFullYear();
+  const result = await query(
+    `SELECT he.id as employee_id, he.full_name, he.designation, he.department,
+            lt.id as leave_type_id, lt.name_bn, lt.code, lt.is_paid,
+            COALESCE(lb.total_days, 0) as total_days,
+            COALESCE(lb.used_days, 0) as used_days,
+            COALESCE(lb.total_days, 0) - COALESCE(lb.used_days, 0) as remaining_days
+     FROM hr_employees he
+     CROSS JOIN hr_leave_types lt
+     LEFT JOIN hr_leave_balances lb ON lb.employee_id = he.id AND lb.leave_type_id = lt.id AND lb.year = $1
+     LEFT JOIN users u ON u.id = he.user_id
+     LEFT JOIN roles r ON r.id = u.role_id
+     WHERE he.status != 'terminated' AND r.name IS DISTINCT FROM 'super_admin' AND lt.is_active = TRUE
+     ORDER BY he.full_name ASC, lt.created_at ASC`,
+    [currentYear]
+  );
+  return result.rows;
+};
+
+
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getEmployeeBalances,
+  getEmployeeBalances, getLeaveRegister,
   applyLeave, getApplications, processApplication,
 };

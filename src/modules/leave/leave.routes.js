@@ -22,6 +22,7 @@ router.post('/my/apply', leaveController.applyLeave);
 // HR admin — all applications
 router.get('/applications', leaveController.getAllApplications);
 router.get('/employees/:employeeId/balances', leaveController.getEmployeeBalances);
+router.get('/register', leaveController.getLeaveRegister);
 
 // Process application (check/consent/approval)
 router.patch('/applications/:id/process', leaveController.processApplication);
