@@ -443,6 +443,27 @@ await pool.query(`ALTER TABLE hr_leave_types ADD COLUMN IF NOT EXISTS eligibilit
 
     console.log('✅ HR employees master table ready');
 
+// ===== Attendance =====
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        date DATE NOT NULL DEFAULT CURRENT_DATE,
+        check_in_time TIMESTAMPTZ,
+        check_out_time TIMESTAMPTZ,
+        status VARCHAR(20) DEFAULT 'present',
+        is_late BOOLEAN DEFAULT FALSE,
+        late_by_minutes INTEGER DEFAULT 0,
+        is_early_leave BOOLEAN DEFAULT FALSE,
+        early_by_minutes INTEGER DEFAULT 0,
+        working_hours NUMERIC(5,2),
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(employee_id, date)
+      )
+    `);
+    console.log('✅ Attendance table ready');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS hr_notices (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
