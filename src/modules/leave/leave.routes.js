@@ -19,6 +19,7 @@ router.get('/my/balances', leaveController.getMyBalances);
 router.get('/my/applications', leaveController.getMyApplications);
 router.post('/my/apply', leaveController.applyLeave);
 router.get('/my/approval-queue', leaveController.getMyApprovalQueue);
+router.get('/my/is-approver', leaveController.checkIsApprover);
 
 // HR admin — all applications
 router.get('/applications', leaveController.getAllApplications);

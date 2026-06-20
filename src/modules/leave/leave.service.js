@@ -396,9 +396,30 @@ const getMyApprovalQueue = async (userId) => {
   return result.rows;
 };
 
+const isApprover = async (userId) => {
+  const userRoleResult = await query(
+    `SELECT r.name as role FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
+    [userId]
+  );
+  const isSuperAdmin = userRoleResult.rows[0]?.role === 'super_admin';
+
+  const empResult = isSuperAdmin
+    ? await query(`SELECT position_id FROM hr_employees WHERE phone = '01805466911'`)
+    : await query('SELECT position_id FROM hr_employees WHERE user_id = $1', [userId]);
+
+  if (empResult.rows.length === 0 || !empResult.rows[0].position_id) return false;
+  const positionId = empResult.rows[0].position_id;
+
+  const policy = await getLeavePolicy();
+  if (!policy) return false;
+
+  return [policy.check_position_id, policy.consent_position_id, policy.approval_position_id].includes(positionId);
+};
+
+
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getEmployeeBalances, getLeaveRegister, getMyApprovalQueue,
+  getEmployeeBalances, getLeaveRegister, getMyApprovalQueue, isApprover,
   applyLeave, getApplications, processApplication,
 };
