@@ -208,9 +208,32 @@ const getApplications = async ({ employeeId, status, year } = {}) => {
      ORDER BY la.created_at DESC`,
     params
   );
-  return result.rows;
-};
 
+  // Attach "currently with" info for pending applications (who/which position is responsible right now)
+  const policy = await getLeavePolicy();
+  const applications = result.rows;
+
+  for (const app of applications) {
+    if (!app.status.startsWith('pending_') || !policy) continue;
+    const stage = app.status.replace('pending_', '');
+    const positionId = stage === 'check' ? policy.check_position_id
+      : stage === 'consent' ? policy.consent_position_id
+      : policy.approval_position_id;
+
+    if (positionId) {
+      const holders = await query(
+        `SELECT he.full_name FROM hr_employees he
+         LEFT JOIN users u ON u.id = he.user_id
+         LEFT JOIN roles r ON r.id = u.role_id
+         WHERE he.position_id = $1 AND r.name IS DISTINCT FROM 'super_admin'`,
+        [positionId]
+      );
+      app.pending_with = holders.rows.map(h => h.full_name).join(', ') || null;
+    }
+  }
+
+  return applications;
+};
 const processApplication = async (applicationId, action, actorEmployeeId, data = {}) => {
   const appResult = await query(
     'SELECT * FROM hr_leave_applications WHERE id = $1',
