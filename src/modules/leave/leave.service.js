@@ -140,7 +140,7 @@ const calculateWorkingDays = async (employeeId, startDate, endDate) => {
 };
 
 const applyLeave = async (employeeId, data) => {
-  const { leave_type_id, start_date, end_date, is_half_day, reason } = data;
+  const { leave_type_id, start_date, end_date, is_half_day, reason, half_day_from, half_day_to } = data;
 
   // Calculate duration
   let duration_days;
@@ -176,11 +176,12 @@ const applyLeave = async (employeeId, data) => {
     }
   }
 
-  const result = await query(
+ const result = await query(
     `INSERT INTO hr_leave_applications
-       (employee_id, leave_type_id, start_date, end_date, duration_days, is_half_day, reason, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [employeeId, leave_type_id, start_date, end_date, duration_days, is_half_day || false, reason, firstStatus]
+       (employee_id, leave_type_id, start_date, end_date, duration_days, is_half_day, reason, status, half_day_from, half_day_to)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    [employeeId, leave_type_id, start_date, end_date, duration_days, is_half_day || false, reason, firstStatus,
+     is_half_day ? (half_day_from || null) : null, is_half_day ? (half_day_to || null) : null]
   );
   return result.rows[0];
 };

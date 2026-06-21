@@ -442,7 +442,8 @@ await pool.query(`ALTER TABLE hr_leave_types ADD COLUMN IF NOT EXISTS eligibilit
     console.log('✅ Leave management tables ready');
 
     console.log('✅ HR employees master table ready');
-
+await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS half_day_from TIME`);
+await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS half_day_to TIME`);
 // ===== Attendance =====
     await pool.query(`
       CREATE TABLE IF NOT EXISTS hr_attendance (
