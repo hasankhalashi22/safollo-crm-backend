@@ -521,6 +521,38 @@ await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS hal
       )
     `);
 
+// Extend hr_payroll_runs for the manual draft → final → close workflow with partial payments
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS previous_due NUMERIC(12,2) DEFAULT 0`);
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS total_paid NUMERIC(12,2) DEFAULT 0`);
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS due_amount NUMERIC(12,2) DEFAULT 0`);
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS finalized_by UUID REFERENCES hr_employees(id)`);
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS closed_by UUID REFERENCES hr_employees(id)`);
+    await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS payable_transaction_id UUID`);
+
+    // status now: draft -> finalized -> closed (payments can happen at any stage after draft)
+
+    // Individual payment records (supports multiple partial payments per payroll run)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_payroll_payments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        payroll_run_id UUID NOT NULL REFERENCES hr_payroll_runs(id) ON DELETE CASCADE,
+        amount NUMERIC(12,2) NOT NULL,
+        payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        note TEXT,
+        accounting_transaction_id UUID,
+        paid_by UUID REFERENCES hr_employees(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Payroll settings: add a payable (liability) account and a salary-close day
+    await pool.query(`ALTER TABLE hr_payroll_settings ADD COLUMN IF NOT EXISTS salary_payable_account_id UUID`);
+    await pool.query(`ALTER TABLE hr_payroll_settings ADD COLUMN IF NOT EXISTS close_day INTEGER DEFAULT 28`);
+
+    console.log('✅ Payroll workflow tables (draft/finalize/payments/close) ready');
+
     console.log('✅ Payroll tables ready');
 
 // Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
