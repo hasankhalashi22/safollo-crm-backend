@@ -18,6 +18,7 @@ const fieldConfigRoutes = require('./modules/field-configs/field-configs.routes'
 const hrRoutes = require('./modules/hr/hr.routes');
 const leaveRoutes = require('./modules/leave/leave.routes');
 const attendanceRoutes = require('./modules/attendance/attendance.routes');
+const payrollRoutes = require('./modules/payroll/payroll.routes');
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use('/api/book', require('./modules/sales/book.routes'));
 app.use('/api/hr', hrRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/payroll', payrollRoutes);
 
 // ── Error handling ────────────────────────────────────────
 app.use(notFound);
