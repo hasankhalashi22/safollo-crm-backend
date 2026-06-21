@@ -465,6 +465,64 @@ await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS hal
     `);
     console.log('✅ Attendance table ready');
 
+// ===== Payroll =====
+
+    // Per-employee custom salary components (allowances/deductions), recurring each month
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_salary_components (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        type VARCHAR(20) NOT NULL, -- 'allowance' or 'deduction'
+        name VARCHAR(100) NOT NULL,
+        amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Payroll settings (when to auto-generate each month)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_payroll_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        run_day INTEGER NOT NULL DEFAULT 1,
+        salary_expense_account_id UUID,
+        payment_account_id UUID,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    const payrollSettingsCheck = await pool.query('SELECT COUNT(*) FROM hr_payroll_settings');
+    if (parseInt(payrollSettingsCheck.rows[0].count) === 0) {
+      await pool.query(`INSERT INTO hr_payroll_settings (run_day) VALUES (1)`);
+      console.log('✅ Default payroll settings created');
+    }
+
+    // Monthly payroll records (one per employee per month)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_payroll_runs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        month INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        basic_salary NUMERIC(12,2) NOT NULL DEFAULT 0,
+        total_allowances NUMERIC(12,2) NOT NULL DEFAULT 0,
+        total_deductions NUMERIC(12,2) NOT NULL DEFAULT 0,
+        unpaid_leave_days NUMERIC(5,1) NOT NULL DEFAULT 0,
+        unpaid_leave_deduction NUMERIC(12,2) NOT NULL DEFAULT 0,
+        net_payable NUMERIC(12,2) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending_review', -- pending_review | approved | paid
+        approved_by UUID REFERENCES hr_employees(id),
+        approved_at TIMESTAMPTZ,
+        accounting_transaction_id UUID,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(employee_id, month, year)
+      )
+    `);
+
+    console.log('✅ Payroll tables ready');
+
 // Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
     const employeeRoleCheck = await pool.query("SELECT id FROM roles WHERE name = 'employee'");
     if (employeeRoleCheck.rows.length === 0) {
