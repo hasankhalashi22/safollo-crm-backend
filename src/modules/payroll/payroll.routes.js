@@ -13,8 +13,16 @@ router.delete('/components/:id', payrollController.removeComponent);
 router.get('/settings', payrollController.getSettings);
 router.patch('/settings', payrollController.updateSettings);
 
-router.post('/generate', payrollController.generatePayroll);
+router.post('/prepare', payrollController.prepareMonth);
+router.patch('/runs/:id', payrollController.updateDraftRun);
+router.patch('/runs/:id/finalize', payrollController.finalizeRun);
+router.post('/finalize-all', payrollController.finalizeAllDrafts);
+
+router.post('/runs/:id/payments', payrollController.recordPayment);
+router.get('/runs/:id/payments', payrollController.getPayments);
+
+router.post('/close', payrollController.closeMonth);
+
 router.get('/runs', payrollController.getPayrollRuns);
-router.patch('/runs/:id/approve', payrollController.approvePayrollRun);
 
 module.exports = router;

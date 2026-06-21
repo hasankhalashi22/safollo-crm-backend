@@ -34,23 +34,24 @@ const getSettings = async () => {
 };
 
 const updateSettings = async (data) => {
-  const { run_day, salary_expense_account_id, payment_account_id } = data;
+  const { run_day, close_day, salary_expense_account_id, payment_account_id, salary_payable_account_id } = data;
   const result = await query(
     `UPDATE hr_payroll_settings SET
        run_day = COALESCE($1, run_day),
-       salary_expense_account_id = COALESCE($2, salary_expense_account_id),
-       payment_account_id = COALESCE($3, payment_account_id),
+       close_day = COALESCE($2, close_day),
+       salary_expense_account_id = COALESCE($3, salary_expense_account_id),
+       payment_account_id = COALESCE($4, payment_account_id),
+       salary_payable_account_id = COALESCE($5, salary_payable_account_id),
        updated_at = NOW()
      WHERE is_active = TRUE RETURNING *`,
-    [run_day, salary_expense_account_id || null, payment_account_id || null]
+    [run_day, close_day, salary_expense_account_id || null, payment_account_id || null, salary_payable_account_id || null]
   );
   return result.rows[0];
 };
 
-// ===== Payroll Generation =====
+// ===== Step 1: Prepare (draft) =====
 
 const calculateUnpaidLeaveDeduction = async (employeeId, month, year, dailyRate) => {
-  // Find approved unpaid-leave applications overlapping this month
   const result = await query(
     `SELECT COALESCE(SUM(COALESCE(la.modified_duration_days, la.duration_days)), 0) as total_days
      FROM hr_leave_applications la
@@ -63,14 +64,26 @@ const calculateUnpaidLeaveDeduction = async (employeeId, month, year, dailyRate)
   return { days, deduction: days * dailyRate };
 };
 
-const generatePayrollForMonth = async (month, year) => {
-  // Only full-time employees, excluding super_admin
+const getPreviousDue = async (employeeId, month, year) => {
+  // Previous calendar month
+  let prevMonth = month - 1;
+  let prevYear = year;
+  if (prevMonth === 0) { prevMonth = 12; prevYear -= 1; }
+
+  const result = await query(
+    `SELECT due_amount FROM hr_payroll_runs WHERE employee_id = $1 AND month = $2 AND year = $3`,
+    [employeeId, prevMonth, prevYear]
+  );
+  return result.rows.length > 0 ? parseFloat(result.rows[0].due_amount) || 0 : 0;
+};
+
+const prepareMonth = async (month, year) => {
   const employeesResult = await query(
     `SELECT he.id, he.basic_salary
      FROM hr_employees he
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
-     WHERE he.employment_type = 'full_time' AND he.status = 'active'
+     WHERE he.employment_type = 'full_time' AND he.status != 'terminated'
        AND r.name IS DISTINCT FROM 'super_admin'`
   );
 
@@ -78,10 +91,10 @@ const generatePayrollForMonth = async (month, year) => {
 
   for (const emp of employeesResult.rows) {
     const existing = await query(
-      `SELECT id FROM hr_payroll_runs WHERE employee_id = $1 AND month = $2 AND year = $3`,
+      `SELECT * FROM hr_payroll_runs WHERE employee_id = $1 AND month = $2 AND year = $3`,
       [emp.id, month, year]
     );
-    if (existing.rows.length > 0) continue; // already generated, skip
+    if (existing.rows.length > 0) { created.push(existing.rows[0]); continue; } // already prepared, return existing
 
     const basicSalary = parseFloat(emp.basic_salary) || 0;
     const dailyRate = basicSalary / 30;
@@ -91,15 +104,16 @@ const generatePayrollForMonth = async (month, year) => {
     const totalDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
 
     const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(emp.id, month, year, dailyRate);
+    const previousDue = await getPreviousDue(emp.id, month, year);
 
-    const netPayable = basicSalary + totalAllowances - totalDeductions - unpaidDeduction;
+    const netPayable = basicSalary + totalAllowances - totalDeductions - unpaidDeduction + previousDue;
 
     const result = await query(
       `INSERT INTO hr_payroll_runs
          (employee_id, month, year, basic_salary, total_allowances, total_deductions,
-          unpaid_leave_days, unpaid_leave_deduction, net_payable, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending_review') RETURNING *`,
-      [emp.id, month, year, basicSalary, totalAllowances, totalDeductions, unpaidDays, unpaidDeduction, netPayable]
+          unpaid_leave_days, unpaid_leave_deduction, previous_due, net_payable, total_paid, due_amount, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$10,'draft') RETURNING *`,
+      [emp.id, month, year, basicSalary, totalAllowances, totalDeductions, unpaidDays, unpaidDeduction, previousDue, netPayable]
     );
     created.push(result.rows[0]);
   }
@@ -107,7 +121,161 @@ const generatePayrollForMonth = async (month, year) => {
   return created;
 };
 
-// ===== Payroll Listing & Approval =====
+// ===== Step 2: Edit draft (manual override) =====
+
+const updateDraftRun = async (id, data) => {
+  const existing = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [id]);
+  if (existing.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
+  if (existing.rows[0].status !== 'draft') throw { statusCode: 400, message: 'শুধুমাত্র draft অবস্থায় edit করা যাবে' };
+
+  const { basic_salary, total_allowances, total_deductions, unpaid_leave_deduction, previous_due } = data;
+
+  const basic = basic_salary !== undefined ? parseFloat(basic_salary) : parseFloat(existing.rows[0].basic_salary);
+  const allow = total_allowances !== undefined ? parseFloat(total_allowances) : parseFloat(existing.rows[0].total_allowances);
+  const ded = total_deductions !== undefined ? parseFloat(total_deductions) : parseFloat(existing.rows[0].total_deductions);
+  const unpaidDed = unpaid_leave_deduction !== undefined ? parseFloat(unpaid_leave_deduction) : parseFloat(existing.rows[0].unpaid_leave_deduction);
+  const prevDue = previous_due !== undefined ? parseFloat(previous_due) : parseFloat(existing.rows[0].previous_due);
+
+  const netPayable = basic + allow - ded - unpaidDed + prevDue;
+  const dueAmount = netPayable - parseFloat(existing.rows[0].total_paid);
+
+  const result = await query(
+    `UPDATE hr_payroll_runs SET
+       basic_salary = $1, total_allowances = $2, total_deductions = $3,
+       unpaid_leave_deduction = $4, previous_due = $5, net_payable = $6, due_amount = $7
+     WHERE id = $8 RETURNING *`,
+    [basic, allow, ded, unpaidDed, prevDue, netPayable, dueAmount, id]
+  );
+  return result.rows[0];
+};
+
+// ===== Step 3: Finalize =====
+
+const finalizeRun = async (id, finalizedByEmployeeId) => {
+  const result = await query(
+    `UPDATE hr_payroll_runs SET status = 'finalized', finalized_at = NOW(), finalized_by = $1
+     WHERE id = $2 AND status = 'draft' RETURNING *`,
+    [finalizedByEmployeeId, id]
+  );
+  if (result.rows.length === 0) throw { statusCode: 400, message: 'এই payroll finalize করা সম্ভব নয়' };
+  return result.rows[0];
+};
+
+const finalizeAllDrafts = async (month, year, finalizedByEmployeeId) => {
+  const result = await query(
+    `UPDATE hr_payroll_runs SET status = 'finalized', finalized_at = NOW(), finalized_by = $1
+     WHERE month = $2 AND year = $3 AND status = 'draft' RETURNING *`,
+    [finalizedByEmployeeId, month, year]
+  );
+  return result.rows;
+};
+
+// ===== Step 4: Payment (partial or full, allowed any time after draft) =====
+
+const recordPayment = async (payrollRunId, data, paidByEmployeeId, createdByUserId) => {
+  const { amount, payment_date, note } = data;
+  if (!amount || parseFloat(amount) <= 0) throw { statusCode: 400, message: 'সঠিক পরিমাণ দিন' };
+
+  const runResult = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [payrollRunId]);
+  if (runResult.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
+  const run = runResult.rows[0];
+
+  if (run.status === 'draft') throw { statusCode: 400, message: 'প্রথমে Finalize করুন, তারপর payment দিন' };
+
+  const settings = await getSettings();
+  if (!settings?.payment_account_id) throw { statusCode: 400, message: 'Payroll Settings-এ Payment account সেট করুন' };
+
+  const empNameResult = await query('SELECT full_name FROM hr_employees WHERE id = $1', [run.employee_id]);
+  const empName = empNameResult.rows[0]?.full_name || '';
+
+  // Decide which account to debit: if already closed (liability recorded), debit the payable account; otherwise debit expense account
+  const debitAccountId = run.closed_at ? settings.salary_payable_account_id : settings.salary_expense_account_id;
+  if (!debitAccountId) throw { statusCode: 400, message: 'Payroll Settings-এ প্রয়োজনীয় account সেট করুন' };
+
+  const txn = await transactionsService.createTransaction({
+    transaction_date: payment_date || new Date().toISOString().split('T')[0],
+    transaction_type: 'expense',
+    description: `Salary Payment - ${empName} (${run.month}/${run.year})${note ? ' - ' + note : ''}`,
+    amount,
+    debit_account_id: debitAccountId,
+    credit_account_id: settings.payment_account_id,
+  }, createdByUserId, null);
+
+  const paymentResult = await query(
+    `INSERT INTO hr_payroll_payments (payroll_run_id, amount, payment_date, note, accounting_transaction_id, paid_by)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [payrollRunId, amount, payment_date || new Date().toISOString().split('T')[0], note || null, txn.id, paidByEmployeeId]
+  );
+
+  const newTotalPaid = parseFloat(run.total_paid) + parseFloat(amount);
+  const newDue = parseFloat(run.net_payable) - newTotalPaid;
+
+  await query(
+    `UPDATE hr_payroll_runs SET total_paid = $1, due_amount = $2 WHERE id = $3`,
+    [newTotalPaid, newDue, payrollRunId]
+  );
+
+  return paymentResult.rows[0];
+};
+
+const getPayments = async (payrollRunId) => {
+  const result = await query(
+    `SELECT * FROM hr_payroll_payments WHERE payroll_run_id = $1 ORDER BY payment_date DESC, created_at DESC`,
+    [payrollRunId]
+  );
+  return result.rows;
+};
+
+// ===== Step 5: Close month (record remaining due as payable liability) =====
+
+const closeMonth = async (month, year, closedByEmployeeId, createdByUserId) => {
+  const settings = await getSettings();
+  if (!settings?.salary_payable_account_id || !settings?.salary_expense_account_id) {
+    throw { statusCode: 400, message: 'Payroll Settings-এ Salary Expense ও Payable account সেট করুন' };
+  }
+
+  const runsResult = await query(
+    `SELECT pr.*, he.full_name FROM hr_payroll_runs pr
+     JOIN hr_employees he ON he.id = pr.employee_id
+     WHERE pr.month = $1 AND pr.year = $2 AND pr.status = 'finalized'`,
+    [month, year]
+  );
+
+  const closed = [];
+
+  for (const run of runsResult.rows) {
+    const due = parseFloat(run.due_amount);
+
+    // Record the full expense for this employee (the amount earned this month, regardless of paid/due)
+    // and move the unpaid portion to a payable liability.
+    if (due > 0) {
+      const txn = await transactionsService.createTransaction({
+        transaction_date: new Date().toISOString().split('T')[0],
+        transaction_type: 'expense',
+        description: `Salary Payable - ${run.full_name} (${run.month}/${run.year})`,
+        amount: due,
+        debit_account_id: settings.salary_expense_account_id,
+        credit_account_id: settings.salary_payable_account_id,
+      }, createdByUserId, null);
+
+      await query(
+        `UPDATE hr_payroll_runs SET status = 'closed', closed_at = NOW(), closed_by = $1, payable_transaction_id = $2
+         WHERE id = $3`,
+        [closedByEmployeeId, txn.id, run.id]
+      );
+    } else {
+      await query(
+        `UPDATE hr_payroll_runs SET status = 'closed', closed_at = NOW(), closed_by = $1 WHERE id = $2`,
+        [closedByEmployeeId, run.id]
+      );
+    }
+    closed.push(run.id);
+  }
+
+  return { closed_count: closed.length };
+};
+
+// ===== Listing =====
 
 const getPayrollRuns = async (month, year) => {
   const result = await query(
@@ -123,45 +291,12 @@ const getPayrollRuns = async (month, year) => {
   return result.rows;
 };
 
-const approvePayrollRun = async (id, approvedByEmployeeId, createdByUserId) => {
-  const runResult = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [id]);
-  if (runResult.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
-  const run = runResult.rows[0];
-
-  if (run.status !== 'pending_review') {
-    throw { statusCode: 400, message: 'এই payroll ইতিমধ্যে প্রক্রিয়া হয়েছে' };
-  }
-
-  const settings = await getSettings();
-  if (!settings?.salary_expense_account_id || !settings?.payment_account_id) {
-    throw { statusCode: 400, message: 'Payroll Settings-এ Salary Expense ও Payment account সেট করুন' };
-  }
-
-  // Create the accounting transaction
-  const transactionDate = new Date(run.year, run.month - 1, 1).toISOString().split('T')[0];
-  const empNameResult = await query('SELECT full_name FROM hr_employees WHERE id = $1', [run.employee_id]);
-
-  const txn = await transactionsService.createTransaction({
-    transaction_date: transactionDate,
-    transaction_type: 'expense',
-    description: `Salary Payment - ${empNameResult.rows[0]?.full_name || ''} (${run.month}/${run.year})`,
-    amount: run.net_payable,
-    debit_account_id: settings.salary_expense_account_id,
-    credit_account_id: settings.payment_account_id,
-    employee_id: null,
-  }, createdByUserId, null);
-
-  const result = await query(
-    `UPDATE hr_payroll_runs SET
-       status = 'approved', approved_by = $1, approved_at = NOW(), accounting_transaction_id = $2
-     WHERE id = $3 RETURNING *`,
-    [approvedByEmployeeId, txn.id, id]
-  );
-  return result.rows[0];
-};
-
 module.exports = {
   getEmployeeComponents, addComponent, removeComponent,
   getSettings, updateSettings,
-  generatePayrollForMonth, getPayrollRuns, approvePayrollRun,
+  prepareMonth, updateDraftRun,
+  finalizeRun, finalizeAllDrafts,
+  recordPayment, getPayments,
+  closeMonth,
+  getPayrollRuns,
 };

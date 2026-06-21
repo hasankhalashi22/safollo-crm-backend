@@ -1,6 +1,11 @@
 const payrollService = require('./payroll.service');
 const { query } = require('../../config/database');
 
+const getMyEmployeeId = async (userId) => {
+  const result = await query('SELECT id FROM hr_employees WHERE user_id = $1', [userId]);
+  return result.rows.length > 0 ? result.rows[0].id : null;
+};
+
 const getEmployeeComponents = async (req, res, next) => {
   try {
     const result = await payrollService.getEmployeeComponents(req.params.employeeId);
@@ -36,11 +41,59 @@ const updateSettings = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-const generatePayroll = async (req, res, next) => {
+const prepareMonth = async (req, res, next) => {
   try {
     const { month, year } = req.body;
-    const result = await payrollService.generatePayrollForMonth(month, year);
-    res.json({ success: true, data: result, message: `${result.length}টি payroll record তৈরি হয়েছে` });
+    const result = await payrollService.prepareMonth(month, year);
+    res.json({ success: true, data: result, message: `${result.length}টি payroll record প্রস্তুত হয়েছে` });
+  } catch (err) { next(err); }
+};
+
+const updateDraftRun = async (req, res, next) => {
+  try {
+    const result = await payrollService.updateDraftRun(req.params.id, req.body);
+    res.json({ success: true, data: result, message: 'আপডেট হয়েছে' });
+  } catch (err) { next(err); }
+};
+
+const finalizeRun = async (req, res, next) => {
+  try {
+    const employeeId = await getMyEmployeeId(req.user.id);
+    const result = await payrollService.finalizeRun(req.params.id, employeeId);
+    res.json({ success: true, data: result, message: 'Finalize হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const finalizeAllDrafts = async (req, res, next) => {
+  try {
+    const employeeId = await getMyEmployeeId(req.user.id);
+    const { month, year } = req.body;
+    const result = await payrollService.finalizeAllDrafts(month, year, employeeId);
+    res.json({ success: true, data: result, message: `${result.length}টি payroll finalize হয়েছে ✅` });
+  } catch (err) { next(err); }
+};
+
+const recordPayment = async (req, res, next) => {
+  try {
+    const employeeId = await getMyEmployeeId(req.user.id);
+    const result = await payrollService.recordPayment(req.params.id, req.body, employeeId, req.user.id);
+    res.status(201).json({ success: true, data: result, message: 'পেমেন্ট রেকর্ড হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const getPayments = async (req, res, next) => {
+  try {
+    const result = await payrollService.getPayments(req.params.id);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const closeMonth = async (req, res, next) => {
+  try {
+    const employeeId = await getMyEmployeeId(req.user.id);
+    const { month, year } = req.body;
+    const result = await payrollService.closeMonth(month, year, employeeId, req.user.id);
+    res.json({ success: true, data: result, message: `${result.closed_count}টি payroll close হয়েছে ✅` });
   } catch (err) { next(err); }
 };
 
@@ -51,17 +104,12 @@ const getPayrollRuns = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-const approvePayrollRun = async (req, res, next) => {
-  try {
-    const empResult = await query('SELECT id FROM hr_employees WHERE user_id = $1', [req.user.id]);
-    const approverId = empResult.rows.length > 0 ? empResult.rows[0].id : null;
-    const result = await payrollService.approvePayrollRun(req.params.id, approverId, req.user.id);
-    res.json({ success: true, data: result, message: 'Payroll অনুমোদিত ও Accounting-এ যুক্ত হয়েছে ✅' });
-  } catch (err) { next(err); }
-};
-
 module.exports = {
   getEmployeeComponents, addComponent, removeComponent,
   getSettings, updateSettings,
-  generatePayroll, getPayrollRuns, approvePayrollRun,
+  prepareMonth, updateDraftRun,
+  finalizeRun, finalizeAllDrafts,
+  recordPayment, getPayments,
+  closeMonth,
+  getPayrollRuns,
 };
