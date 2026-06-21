@@ -599,6 +599,49 @@ await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS hal
 
     console.log('✅ Attendance policy and waiver tables ready');
 
+// Break configuration (admin-defined, applies per employee or globally)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_break_types (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(50) NOT NULL,
+        name_bn VARCHAR(50) NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    const breakTypeCheck = await pool.query('SELECT COUNT(*) FROM hr_break_types');
+    if (parseInt(breakTypeCheck.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO hr_break_types (name, name_bn, duration_minutes) VALUES
+        ('Lunch Break', 'দুপুরের বিরতি', 60),
+        ('Evening Break', 'সন্ধ্যার বিরতি', 30)
+      `);
+      console.log('✅ Default break types seeded');
+    }
+
+    // Individual break events within a day (linked to the day's attendance record)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance_breaks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        attendance_id UUID NOT NULL REFERENCES hr_attendance(id) ON DELETE CASCADE,
+        break_type_id UUID NOT NULL REFERENCES hr_break_types(id),
+        break_out_time TIMESTAMPTZ,
+        break_in_time TIMESTAMPTZ,
+        duration_minutes NUMERIC(6,1),
+        excess_minutes NUMERIC(6,1) DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Add computed fields to hr_attendance for total deduction tracking
+    await pool.query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS total_deficit_minutes NUMERIC(6,1) DEFAULT 0`);
+    await pool.query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS penalty_amount NUMERIC(10,2) DEFAULT 0`);
+    await pool.query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS is_waived BOOLEAN DEFAULT FALSE`);
+
+    console.log('✅ Break tracking tables ready');
+
 // Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
     const employeeRoleCheck = await pool.query("SELECT id FROM roles WHERE name = 'employee'");
     if (employeeRoleCheck.rows.length === 0) {
