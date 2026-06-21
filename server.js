@@ -555,6 +555,50 @@ await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS hal
 
     console.log('✅ Payroll tables ready');
 
+// ===== Attendance Policy (deduction rules) =====
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance_policies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        is_active BOOLEAN DEFAULT TRUE,
+        grace_minutes INTEGER DEFAULT 30,
+        penalty_multiplier NUMERIC(3,1) DEFAULT 1.0,
+        extended_threshold_minutes INTEGER DEFAULT 300,
+        extended_penalty_multiplier NUMERIC(3,1) DEFAULT 1.5,
+        consecutive_late_days_for_absent INTEGER DEFAULT 3,
+        monthly_late_threshold_days INTEGER DEFAULT 3,
+        monthly_late_deduction_days NUMERIC(3,1) DEFAULT 0.5,
+        waiver_position_id UUID REFERENCES hr_positions(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    const attPolicyCheck = await pool.query('SELECT COUNT(*) FROM hr_attendance_policies');
+    if (parseInt(attPolicyCheck.rows[0].count) === 0) {
+      await pool.query(`INSERT INTO hr_attendance_policies DEFAULT VALUES`);
+      console.log('✅ Default attendance policy created');
+    }
+
+    // Waiver requests/records for attendance penalties
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance_waivers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        attendance_id UUID REFERENCES hr_attendance(id) ON DELETE CASCADE,
+        month INTEGER,
+        year INTEGER,
+        waiver_type VARCHAR(30) NOT NULL, -- 'daily_penalty' | 'pattern_absent' | 'monthly_late_deduction'
+        reason TEXT,
+        status VARCHAR(20) DEFAULT 'pending', -- pending | approved | rejected
+        requested_by UUID REFERENCES hr_employees(id),
+        decided_by UUID REFERENCES hr_employees(id),
+        decided_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    console.log('✅ Attendance policy and waiver tables ready');
+
 // Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
     const employeeRoleCheck = await pool.query("SELECT id FROM roles WHERE name = 'employee'");
     if (employeeRoleCheck.rows.length === 0) {
