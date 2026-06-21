@@ -255,9 +255,28 @@ const getAllAttendance = async ({ date, dateFrom, dateTo, employeeId, status } =
      ORDER BY a.date DESC, a.check_in_time ASC NULLS LAST`,
     params
   );
-  return result.rows;
-};
 
+  const records = result.rows;
+  if (records.length === 0) return records;
+
+  const attendanceIds = records.map(r => r.id);
+  const breaksResult = await query(
+    `SELECT ab.*, bt.name_bn as break_name
+     FROM hr_attendance_breaks ab
+     JOIN hr_break_types bt ON bt.id = ab.break_type_id
+     WHERE ab.attendance_id = ANY($1)
+     ORDER BY ab.break_out_time ASC`,
+    [attendanceIds]
+  );
+
+  const breaksByAttendance = {};
+  breaksResult.rows.forEach(b => {
+    if (!breaksByAttendance[b.attendance_id]) breaksByAttendance[b.attendance_id] = [];
+    breaksByAttendance[b.attendance_id].push(b);
+  });
+
+  return records.map(r => ({ ...r, breaks: breaksByAttendance[r.id] || [] }));
+};
 const getMonthlySummary = async (employeeId, month, year) => {
   const m = month || (new Date().getMonth() + 1);
   const y = year || new Date().getFullYear();
