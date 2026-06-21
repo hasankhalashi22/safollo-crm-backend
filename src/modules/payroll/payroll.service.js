@@ -1,5 +1,6 @@
 const { query } = require('../../config/database');
 const transactionsService = require('../accounting/transactions.service');
+const attendanceService = require('../attendance/attendance.service');
 
 // ===== Salary Components (per-employee allowance/deduction) =====
 
@@ -96,24 +97,40 @@ const prepareMonth = async (month, year) => {
     );
     if (existing.rows.length > 0) { created.push(existing.rows[0]); continue; } // already prepared, return existing
 
-    const basicSalary = parseFloat(emp.basic_salary) || 0;
+   const basicSalary = parseFloat(emp.basic_salary) || 0;
     const dailyRate = basicSalary / 30;
 
     const components = await getEmployeeComponents(emp.id);
     const totalAllowances = components.filter(c => c.type === 'allowance').reduce((s, c) => s + parseFloat(c.amount), 0);
-    const totalDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
+    const manualDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
 
     const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(emp.id, month, year, dailyRate);
     const previousDue = await getPreviousDue(emp.id, month, year);
+
+    // Daily attendance penalties (sum of penalty_amount from each day, excluding waived days)
+    const dailyPenaltyResult = await query(
+      `SELECT COALESCE(SUM(penalty_amount), 0) as total FROM hr_attendance
+       WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3 AND is_waived = FALSE`,
+      [emp.id, month, year]
+    );
+    const dailyAttendancePenalty = parseFloat(dailyPenaltyResult.rows[0].total) || 0;
+
+    // Pattern-based penalties (consecutive late -> extra absent days, monthly late threshold deduction)
+    const pattern = await attendanceService.calculatePatternPenalties(emp.id, month, year);
+    const patternDeductionDays = pattern.extra_absent_days + pattern.monthly_late_deduction_days;
+    const patternDeductionAmount = patternDeductionDays * dailyRate;
+
+    const totalAttendanceDeduction = dailyAttendancePenalty + patternDeductionAmount;
+    const totalDeductions = manualDeductions + totalAttendanceDeduction;
 
     const netPayable = basicSalary + totalAllowances - totalDeductions - unpaidDeduction + previousDue;
 
     const result = await query(
       `INSERT INTO hr_payroll_runs
          (employee_id, month, year, basic_salary, total_allowances, total_deductions,
-          unpaid_leave_days, unpaid_leave_deduction, previous_due, net_payable, total_paid, due_amount, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$10,'draft') RETURNING *`,
-      [emp.id, month, year, basicSalary, totalAllowances, totalDeductions, unpaidDays, unpaidDeduction, previousDue, netPayable]
+          unpaid_leave_days, unpaid_leave_deduction, previous_due, attendance_deduction, net_payable, total_paid, due_amount, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$11,'draft') RETURNING *`,
+      [emp.id, month, year, basicSalary, totalAllowances, totalDeductions, unpaidDays, unpaidDeduction, previousDue, totalAttendanceDeduction, netPayable]
     );
     created.push(result.rows[0]);
   }

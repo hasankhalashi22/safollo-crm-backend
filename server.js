@@ -642,6 +642,9 @@ await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS hal
 
     console.log('✅ Break tracking tables ready');
 
+await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS attendance_deduction NUMERIC(12,2) DEFAULT 0`);
+    console.log('✅ Payroll attendance_deduction column ready');
+
 // Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
     const employeeRoleCheck = await pool.query("SELECT id FROM roles WHERE name = 'employee'");
     if (employeeRoleCheck.rows.length === 0) {
