@@ -271,9 +271,10 @@ const recalculateRun = async (id) => {
   const totalAllowances = components.filter(c => c.type === 'allowance').reduce((s, c) => s + parseFloat(c.amount), 0);
   const manualDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
 
-  const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
+ const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
   const dailyRate = basicSalary / daysInMonth;
   const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
+  console.log(`[Payroll Recalculate] employee=${run.employee_id} month=${run.month}/${run.year} basic=${basicSalary} workingDays=${workingDays} extraDays=${extraWorkingDays} daysInMonth=${daysInMonth} dailyRate=${dailyRate} earnedSalary=${earnedSalary}`);
 
   const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(run.employee_id, run.month, run.year, dailyRate);
   const previousDue = await getPreviousDue(run.employee_id, run.month, run.year);
