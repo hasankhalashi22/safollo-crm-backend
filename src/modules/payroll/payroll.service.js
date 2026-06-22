@@ -215,8 +215,8 @@ const prepareMonth = async (month, year) => {
     const patternDeductionAmount = patternDeductionDays * dailyRate;
 
     const totalAttendanceDeduction = dailyAttendancePenalty + patternDeductionAmount;
-    const totalDeductions = manualDeductions + totalAttendanceDeduction;
-    const netPayable = earnedSalary + totalAllowances - totalDeductions + previousDue;
+    const totalDeductions = manualDeductions; // শুধু manual deductions, attendance penalty আলাদা
+    const netPayable = earnedSalary + totalAllowances - totalDeductions - totalAttendanceDeduction + previousDue;
 
     const result = await query(
       `INSERT INTO hr_payroll_runs
@@ -321,8 +321,8 @@ const recalculateRun = async (id) => {
   const patternDeductionAmount = patternDeductionDays * dailyRate;
 
   const totalAttendanceDeduction = dailyAttendancePenalty + patternDeductionAmount;
-  const totalDeductions = manualDeductions + totalAttendanceDeduction;
-  const netPayable = earnedSalary + totalAllowances - totalDeductions + previousDue;
+  const totalDeductions = manualDeductions; // শুধু manual deductions, attendance penalty আলাদা
+  const netPayable = earnedSalary + totalAllowances - totalDeductions - totalAttendanceDeduction + previousDue;
   const dueAmount = netPayable - parseFloat(run.total_paid);
 
   const result = await query(
