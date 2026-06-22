@@ -111,6 +111,20 @@ const recalculateRun = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const updatePayment = async (req, res, next) => {
+  try {
+    const result = await payrollService.updatePayment(req.params.paymentId, req.body, req.user.id);
+    res.json({ success: true, data: result, message: 'Payment আপডেট হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const deletePayment = async (req, res, next) => {
+  try {
+    await payrollService.deletePayment(req.params.paymentId, req.user.id);
+    res.json({ success: true, message: 'Payment মুছে ফেলা হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getEmployeeComponents, addComponent, removeComponent,
   getSettings, updateSettings,
@@ -118,5 +132,5 @@ module.exports = {
   finalizeRun, finalizeAllDrafts,
   recordPayment, getPayments,
   closeMonth,
-  getPayrollRuns, recalculateRun,
+  getPayrollRuns, recalculateRun, updatePayment, deletePayment,
 };

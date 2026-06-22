@@ -416,6 +416,84 @@ const getPayments = async (payrollRunId) => {
   return result.rows;
 };
 
+const updatePayment = async (paymentId, data, createdByUserId) => {
+  const paymentResult = await query('SELECT * FROM hr_payroll_payments WHERE id = $1', [paymentId]);
+  if (paymentResult.rows.length === 0) throw { statusCode: 404, message: 'Payment পাওয়া যায়নি' };
+  const payment = paymentResult.rows[0];
+
+  const runResult = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [payment.payroll_run_id]);
+  const run = runResult.rows[0];
+  const empNameResult = await query('SELECT full_name FROM hr_employees WHERE id = $1', [run.employee_id]);
+  const empName = empNameResult.rows[0]?.full_name || '';
+
+  const { amount, payment_date, note } = data;
+  const newAmount = amount !== undefined ? parseFloat(amount) : parseFloat(payment.amount);
+  const newDate = payment_date || payment.payment_date;
+  const newNote = note !== undefined ? note : payment.note;
+
+  // Update accounting transaction
+  if (payment.accounting_transaction_id) {
+    await transactionsService.updateTransaction(payment.accounting_transaction_id, {
+      amount: newAmount,
+      transaction_date: newDate,
+      description: `Salary Payment - ${empName} (${run.month}/${run.year})${newNote ? ' - ' + newNote : ''}`,
+    }, null);
+  }
+
+  // Update payment record
+  await query(
+    `UPDATE hr_payroll_payments SET amount = $1, payment_date = $2, note = $3 WHERE id = $4`,
+    [newAmount, newDate, newNote || null, paymentId]
+  );
+
+  // Recalculate total_paid and due_amount
+  const remainingResult = await query(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM hr_payroll_payments WHERE payroll_run_id = $1`,
+    [payment.payroll_run_id]
+  );
+  const newTotalPaid = parseFloat(remainingResult.rows[0].total) || 0;
+  const newDue = parseFloat(run.net_payable) - newTotalPaid;
+
+  await query(
+    `UPDATE hr_payroll_runs SET total_paid = $1, due_amount = $2 WHERE id = $3`,
+    [newTotalPaid, newDue, payment.payroll_run_id]
+  );
+
+  return { success: true, new_total_paid: newTotalPaid, new_due: newDue };
+};
+
+const deletePayment = async (paymentId, createdByUserId) => {
+  const paymentResult = await query('SELECT * FROM hr_payroll_payments WHERE id = $1', [paymentId]);
+  if (paymentResult.rows.length === 0) throw { statusCode: 404, message: 'Payment পাওয়া যায়নি' };
+  const payment = paymentResult.rows[0];
+
+  // Delete linked accounting transaction
+  if (payment.accounting_transaction_id) {
+    await transactionsService.deleteTransaction(payment.accounting_transaction_id);
+  }
+
+  // Delete payment record
+  await query('DELETE FROM hr_payroll_payments WHERE id = $1', [paymentId]);
+
+  // Recalculate total_paid and due_amount
+  const remainingResult = await query(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM hr_payroll_payments WHERE payroll_run_id = $1`,
+    [payment.payroll_run_id]
+  );
+  const newTotalPaid = parseFloat(remainingResult.rows[0].total) || 0;
+
+  const runResult = await query('SELECT net_payable FROM hr_payroll_runs WHERE id = $1', [payment.payroll_run_id]);
+  const netPayable = parseFloat(runResult.rows[0]?.net_payable) || 0;
+  const newDue = netPayable - newTotalPaid;
+
+  await query(
+    `UPDATE hr_payroll_runs SET total_paid = $1, due_amount = $2 WHERE id = $3`,
+    [newTotalPaid, newDue, payment.payroll_run_id]
+  );
+
+  return { success: true };
+};
+
 // ===== Step 5: Close month =====
 
 const closeMonth = async (month, year, closedByEmployeeId, createdByUserId) => {
@@ -482,7 +560,7 @@ module.exports = {
   getSettings, updateSettings,
   prepareMonth, updateDraftRun, recalculateRun,
   finalizeRun, finalizeAllDrafts,
-  recordPayment, getPayments,
+  recordPayment, getPayments, updatePayment, deletePayment,
   closeMonth,
   getPayrollRuns,
 };

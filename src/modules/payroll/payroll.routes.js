@@ -21,6 +21,8 @@ router.post('/finalize-all', payrollController.finalizeAllDrafts);
 
 router.post('/runs/:id/payments', payrollController.recordPayment);
 router.get('/runs/:id/payments', payrollController.getPayments);
+router.patch('/payments/:paymentId', payrollController.updatePayment);
+router.delete('/payments/:paymentId', payrollController.deletePayment);
 
 router.post('/close', payrollController.closeMonth);
 
