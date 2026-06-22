@@ -142,11 +142,31 @@ const setEmployeeModuleAccess = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getHolidays = async (req, res, next) => {
+  try {
+    const result = await hrService.getHolidays(req.query.year);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const createHoliday = async (req, res, next) => {
+  try {
+    const result = await hrService.createHoliday(req.body);
+    res.status(201).json({ success: true, data: result, message: 'ছুটি যুক্ত হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const deleteHoliday = async (req, res, next) => {
+  try {
+    await hrService.deleteHoliday(req.params.id);
+    res.json({ success: true, message: 'মুছে ফেলা হয়েছে' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   uploadPhoto, uploadNid, uploadSignature,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition,
-  getOrganogram,
-  getNotices, createNotice, deleteNotice,
+  getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
 };
