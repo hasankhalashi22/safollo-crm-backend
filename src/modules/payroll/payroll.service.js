@@ -274,9 +274,7 @@ const recalculateRun = async (id) => {
  const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
   const dailyRate = basicSalary / daysInMonth;
   const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
-  console.log(`[Payroll Recalculate] employee=${run.employee_id} month=${run.month}/${run.year} basic=${basicSalary} workingDays=${workingDays} extraDays=${extraWorkingDays} daysInMonth=${daysInMonth} dailyRate=${dailyRate} earnedSalary=${earnedSalary}`);
-console.log(`[Payroll Recalculate 2] unpaidDeduction=${unpaidDeduction} prevDue=${previousDue} attDeduction=${totalAttendanceDeduction} totalDed=${totalDeductions} netPayable=${netPayable} dueAmount=${dueAmount}`);
-
+  
   const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(run.employee_id, run.month, run.year, dailyRate);
   const previousDue = await getPreviousDue(run.employee_id, run.month, run.year);
 
