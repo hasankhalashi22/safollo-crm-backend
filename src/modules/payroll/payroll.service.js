@@ -372,7 +372,6 @@ const recordPayment = async (payrollRunId, data, paidByEmployeeId, createdByUser
   if (runResult.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
   const run = runResult.rows[0];
 
-  if (run.status === 'draft') throw { statusCode: 400, message: 'প্রথমে Finalize করুন, তারপর payment দিন' };
 
   const settings = await getSettings();
   if (!settings?.payment_account_id) throw { statusCode: 400, message: 'Payroll Settings-এ Payment account সেট করুন' };
