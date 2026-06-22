@@ -104,6 +104,13 @@ const getPayrollRuns = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const recalculateRun = async (req, res, next) => {
+  try {
+    const result = await payrollService.recalculateRun(req.params.id);
+    res.json({ success: true, data: result, message: 'Recalculate হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getEmployeeComponents, addComponent, removeComponent,
   getSettings, updateSettings,
@@ -111,5 +118,5 @@ module.exports = {
   finalizeRun, finalizeAllDrafts,
   recordPayment, getPayments,
   closeMonth,
-  getPayrollRuns,
+  getPayrollRuns, recalculateRun,
 };

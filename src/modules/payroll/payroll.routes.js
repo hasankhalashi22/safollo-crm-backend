@@ -15,6 +15,7 @@ router.patch('/settings', payrollController.updateSettings);
 
 router.post('/prepare', payrollController.prepareMonth);
 router.patch('/runs/:id', payrollController.updateDraftRun);
+router.patch('/runs/:id/recalculate', payrollController.recalculateRun);
 router.patch('/runs/:id/finalize', payrollController.finalizeRun);
 router.post('/finalize-all', payrollController.finalizeAllDrafts);
 

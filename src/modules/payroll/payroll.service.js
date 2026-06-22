@@ -258,6 +258,56 @@ const updateDraftRun = async (id, data) => {
   return result.rows[0];
 };
 
+const recalculateRun = async (id) => {
+  const existing = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [id]);
+  if (existing.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
+  if (existing.rows[0].status !== 'draft') throw { statusCode: 400, message: 'শুধুমাত্র draft অবস্থায় recalculate করা যাবে' };
+
+  const run = existing.rows[0];
+  const empResult = await query('SELECT basic_salary FROM hr_employees WHERE id = $1', [run.employee_id]);
+  const basicSalary = parseFloat(empResult.rows[0]?.basic_salary) || 0;
+
+  const components = await getEmployeeComponents(run.employee_id);
+  const totalAllowances = components.filter(c => c.type === 'allowance').reduce((s, c) => s + parseFloat(c.amount), 0);
+  const manualDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
+
+  const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
+  const dailyRate = basicSalary / daysInMonth;
+  const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
+
+  const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(run.employee_id, run.month, run.year, dailyRate);
+  const previousDue = await getPreviousDue(run.employee_id, run.month, run.year);
+
+  const dailyPenaltyResult = await query(
+    `SELECT COALESCE(SUM(penalty_amount), 0) as total FROM hr_attendance
+     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3 AND is_waived = FALSE`,
+    [run.employee_id, run.month, run.year]
+  );
+  const dailyAttendancePenalty = parseFloat(dailyPenaltyResult.rows[0].total) || 0;
+
+  const pattern = await attendanceService.calculatePatternPenalties(run.employee_id, run.month, run.year);
+  const patternDeductionDays = pattern.extra_absent_days + pattern.monthly_late_deduction_days;
+  const patternDeductionAmount = patternDeductionDays * dailyRate;
+
+  const totalAttendanceDeduction = dailyAttendancePenalty + patternDeductionAmount;
+  const totalDeductions = manualDeductions + totalAttendanceDeduction;
+  const netPayable = earnedSalary + totalAllowances - totalDeductions - unpaidDeduction + previousDue;
+  const dueAmount = netPayable - parseFloat(run.total_paid);
+
+  const result = await query(
+    `UPDATE hr_payroll_runs SET
+       basic_salary = $1, total_allowances = $2, total_deductions = $3,
+       unpaid_leave_days = $4, unpaid_leave_deduction = $5, previous_due = $6,
+       attendance_deduction = $7, working_days = $8, extra_working_days = $9,
+       net_payable = $10, due_amount = $11
+     WHERE id = $12 RETURNING *`,
+    [basicSalary, totalAllowances, totalDeductions, unpaidDays, unpaidDeduction,
+     previousDue, totalAttendanceDeduction, workingDays, extraWorkingDays,
+     netPayable, dueAmount, id]
+  );
+  return result.rows[0];
+};
+
 // ===== Step 3: Finalize =====
 
 const finalizeRun = async (id, finalizedByEmployeeId) => {
@@ -403,7 +453,7 @@ const getPayrollRuns = async (month, year) => {
 module.exports = {
   getEmployeeComponents, addComponent, removeComponent,
   getSettings, updateSettings,
-  prepareMonth, updateDraftRun,
+  prepareMonth, updateDraftRun, recalculateRun,
   finalizeRun, finalizeAllDrafts,
   recordPayment, getPayments,
   closeMonth,
