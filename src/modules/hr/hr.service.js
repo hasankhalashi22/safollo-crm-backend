@@ -139,9 +139,10 @@ const updateEmployee = async (id, data) => {
     'nid_image_url', 'nid_image_public_id', 'photo_url', 'photo_public_id',
     'signature_url', 'signature_public_id'
   ];
-  const numericFields = ['basic_salary'];
+const numericFields = ['basic_salary'];
   const dateFields = ['joining_date', 'date_of_birth'];
   const booleanFields = ['is_remote', 'is_locked'];
+  const uuidFields = ['position_id', 'reports_to'];
 
   // Lock check: if employee is locked, reject updates unless explicitly unlocking
   const current = await query('SELECT is_locked FROM hr_employees WHERE id = $1', [id]);
@@ -157,7 +158,7 @@ const updateEmployee = async (id, data) => {
   for (const field of allowedFields) {
     if (data[field] !== undefined) {
       let value = data[field];
-      if ((numericFields.includes(field) || dateFields.includes(field)) && value === '') {
+      if ((numericFields.includes(field) || dateFields.includes(field) || uuidFields.includes(field)) && value === '') {
         value = null;
       }
       fields.push(`${field} = $${idx++}`);
