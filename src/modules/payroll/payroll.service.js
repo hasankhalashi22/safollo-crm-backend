@@ -183,12 +183,32 @@ const prepareMonth = async (month, year) => {
     const previousDue = await getPreviousDue(emp.id, month, year);
 
     // Attendance penalties
-    const dailyPenaltyResult = await query(
-      `SELECT COALESCE(SUM(penalty_amount), 0) as total FROM hr_attendance
-       WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3 AND is_waived = FALSE`,
-      [emp.id, month, year]
-    );
-    const dailyAttendancePenalty = parseFloat(dailyPenaltyResult.rows[0].total) || 0;
+   // Calculate penalty from late_by_minutes directly (in case check-out was missed)
+  const attendanceRecords = await query(
+    `SELECT late_by_minutes, is_waived, penalty_amount FROM hr_attendance
+     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3`,
+    [emp.id, month, year]
+  );
+  const policy = await attendanceService.getPolicy();
+  let dailyAttendancePenalty = 0;
+  for (const rec of attendanceRecords.rows) {
+    if (rec.is_waived) continue;
+    if (parseFloat(rec.penalty_amount) > 0) {
+      dailyAttendancePenalty += parseFloat(rec.penalty_amount);
+    } else if (rec.late_by_minutes > policy.grace_minutes) {
+      const penalizedMinutes = rec.late_by_minutes - policy.grace_minutes;
+      const perMinuteRate = basicSalary / 30 / (8 * 60);
+      const extended = policy.extended_threshold_minutes;
+      let p = 0;
+      if (penalizedMinutes <= extended) {
+        p = penalizedMinutes * perMinuteRate * policy.penalty_multiplier;
+      } else {
+        p = extended * perMinuteRate * policy.penalty_multiplier;
+        p += (penalizedMinutes - extended) * perMinuteRate * policy.extended_penalty_multiplier;
+      }
+      dailyAttendancePenalty += p;
+    }
+  }
 
     const pattern = await attendanceService.calculatePatternPenalties(emp.id, month, year);
     const patternDeductionDays = pattern.extra_absent_days + pattern.monthly_late_deduction_days;
@@ -270,12 +290,31 @@ const recalculateRun = async (id) => {
 
   const previousDue = await getPreviousDue(run.employee_id, run.month, run.year);
 
-  const dailyPenaltyResult = await query(
-    `SELECT COALESCE(SUM(penalty_amount), 0) as total FROM hr_attendance
-     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3 AND is_waived = FALSE`,
+  const attendanceRecords = await query(
+    `SELECT late_by_minutes, is_waived, penalty_amount FROM hr_attendance
+     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3`,
     [run.employee_id, run.month, run.year]
   );
-  const dailyAttendancePenalty = parseFloat(dailyPenaltyResult.rows[0].total) || 0;
+  const policy = await attendanceService.getPolicy();
+  let dailyAttendancePenalty = 0;
+  for (const rec of attendanceRecords.rows) {
+    if (rec.is_waived) continue;
+    if (parseFloat(rec.penalty_amount) > 0) {
+      dailyAttendancePenalty += parseFloat(rec.penalty_amount);
+    } else if (rec.late_by_minutes > policy.grace_minutes) {
+      const penalizedMinutes = rec.late_by_minutes - policy.grace_minutes;
+      const perMinuteRate = basicSalary / 30 / (8 * 60);
+      const extended = policy.extended_threshold_minutes;
+      let p = 0;
+      if (penalizedMinutes <= extended) {
+        p = penalizedMinutes * perMinuteRate * policy.penalty_multiplier;
+      } else {
+        p = extended * perMinuteRate * policy.penalty_multiplier;
+        p += (penalizedMinutes - extended) * perMinuteRate * policy.extended_penalty_multiplier;
+      }
+      dailyAttendancePenalty += p;
+    }
+  }
 
   const pattern = await attendanceService.calculatePatternPenalties(run.employee_id, run.month, run.year);
   const patternDeductionDays = pattern.extra_absent_days + pattern.monthly_late_deduction_days;
