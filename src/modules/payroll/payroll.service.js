@@ -434,8 +434,8 @@ const updatePayment = async (paymentId, data, createdByUserId) => {
   // Update accounting transaction
   if (payment.accounting_transaction_id) {
     // Get existing transaction to preserve debit/credit accounts
-    const existingTxn = await query(
-      'SELECT debit_account_id, credit_account_id FROM acc_transactions WHERE id = $1',
+   const existingTxn = await query(
+      'SELECT debit_account_id, credit_account_id, transaction_type FROM acc_transactions WHERE id = $1',
       [payment.accounting_transaction_id]
     );
     const txn = existingTxn.rows[0];
@@ -446,6 +446,7 @@ const updatePayment = async (paymentId, data, createdByUserId) => {
       description: `Salary Payment - ${empName} (${run.month}/${run.year})${newNote ? ' - ' + newNote : ''}`,
       debit_account_id: txn?.debit_account_id,
       credit_account_id: txn?.credit_account_id,
+      transaction_type: txn?.transaction_type,
     }, null);
   }
 
