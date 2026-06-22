@@ -265,16 +265,24 @@ const updateDraftRun = async (id, data) => {
   if (existing.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
   if (existing.rows[0].status !== 'draft') throw { statusCode: 400, message: 'শুধুমাত্র draft অবস্থায় edit করা যাবে' };
 
+  const run = existing.rows[0];
   const { basic_salary, total_allowances, total_deductions, unpaid_leave_deduction, previous_due } = data;
 
-  const basic = basic_salary !== undefined ? parseFloat(basic_salary) : parseFloat(existing.rows[0].basic_salary);
-  const allow = total_allowances !== undefined ? parseFloat(total_allowances) : parseFloat(existing.rows[0].total_allowances);
-  const ded = total_deductions !== undefined ? parseFloat(total_deductions) : parseFloat(existing.rows[0].total_deductions);
-  const unpaidDed = unpaid_leave_deduction !== undefined ? parseFloat(unpaid_leave_deduction) : parseFloat(existing.rows[0].unpaid_leave_deduction);
-  const prevDue = previous_due !== undefined ? parseFloat(previous_due) : parseFloat(existing.rows[0].previous_due);
+  const basic = basic_salary !== undefined ? parseFloat(basic_salary) : parseFloat(run.basic_salary);
+  const allow = total_allowances !== undefined ? parseFloat(total_allowances) : parseFloat(run.total_allowances);
+  const ded = total_deductions !== undefined ? parseFloat(total_deductions) : parseFloat(run.total_deductions);
+  const unpaidDed = unpaid_leave_deduction !== undefined ? parseFloat(unpaid_leave_deduction) : parseFloat(run.unpaid_leave_deduction);
+  const prevDue = previous_due !== undefined ? parseFloat(previous_due) : parseFloat(run.previous_due);
 
-  const netPayable = basic + allow - ded - unpaidDed + prevDue;
-  const dueAmount = netPayable - parseFloat(existing.rows[0].total_paid);
+  // Working days × daily rate for earned salary (same logic as recalculate)
+  const workingDays = parseFloat(run.working_days) || 0;
+  const extraWorkingDays = parseFloat(run.extra_working_days) || 0;
+  const daysInMonth = new Date(run.year, run.month, 0).getDate();
+  const dailyRate = basic / daysInMonth;
+  const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
+
+  const netPayable = earnedSalary + allow - ded - unpaidDed + prevDue;
+  const dueAmount = netPayable - parseFloat(run.total_paid);
 
   const result = await query(
     `UPDATE hr_payroll_runs SET
@@ -285,7 +293,6 @@ const updateDraftRun = async (id, data) => {
   );
   return result.rows[0];
 };
-
 const recalculateRun = async (id) => {
   const existing = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [id]);
   if (existing.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
