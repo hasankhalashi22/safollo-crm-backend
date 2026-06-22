@@ -135,18 +135,46 @@ const calculateWorkingDays = async (employeeId, month, year) => {
 // ===== Step 1: Prepare (draft) =====
 
 const calculateUnpaidLeaveDeduction = async (employeeId, month, year, dailyRate) => {
-  const result = await query(
-    `SELECT COALESCE(SUM(COALESCE(la.modified_duration_days, la.duration_days)), 0) as total_days
+  // Get unpaid leave applications for this month
+  const leaveResult = await query(
+    `SELECT la.start_date, la.end_date,
+            COALESCE(la.modified_start_date, la.start_date) as eff_start,
+            COALESCE(la.modified_end_date, la.end_date) as eff_end
      FROM hr_leave_applications la
      JOIN hr_leave_types lt ON lt.id = la.leave_type_id
      WHERE la.employee_id = $1 AND la.status = 'approved' AND lt.is_paid = FALSE
        AND EXTRACT(MONTH FROM la.start_date) = $2 AND EXTRACT(YEAR FROM la.start_date) = $3`,
     [employeeId, month, year]
   );
-  const days = parseFloat(result.rows[0].total_days) || 0;
-  return { days, deduction: days * dailyRate };
-};
 
+  if (leaveResult.rows.length === 0) return { days: 0, deduction: 0 };
+
+  // Get actual attendance days (check-in করা দিন) — এই দিনগুলোতে unpaid leave deduction হবে না
+  const attendanceResult = await query(
+    `SELECT date FROM hr_attendance
+     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+     AND check_in_time IS NOT NULL`,
+    [employeeId, month, year]
+  );
+  const attendanceDates = new Set(attendanceResult.rows.map(r => r.date.toISOString().split('T')[0]));
+
+  // Count unpaid leave days excluding days where employee actually checked in
+  let totalDays = 0;
+  for (const leave of leaveResult.rows) {
+    const start = new Date(leave.eff_start);
+    const end = new Date(leave.eff_end);
+    const current = new Date(start);
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      if (!attendanceDates.has(dateStr)) {
+        totalDays++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+  }
+
+  return { days: totalDays, deduction: totalDays * dailyRate };
+};
 const getPreviousDue = async (employeeId, month, year) => {
   // Previous calendar month
   let prevMonth = month - 1;
