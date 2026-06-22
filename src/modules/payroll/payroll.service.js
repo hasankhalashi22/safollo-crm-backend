@@ -264,6 +264,7 @@ const recalculateRun = async (id) => {
   if (existing.rows[0].status !== 'draft') throw { statusCode: 400, message: 'শুধুমাত্র draft অবস্থায় recalculate করা যাবে' };
 
   const run = existing.rows[0];
+
   const empResult = await query('SELECT basic_salary FROM hr_employees WHERE id = $1', [run.employee_id]);
   const basicSalary = parseFloat(empResult.rows[0]?.basic_salary) || 0;
 
@@ -271,10 +272,10 @@ const recalculateRun = async (id) => {
   const totalAllowances = components.filter(c => c.type === 'allowance').reduce((s, c) => s + parseFloat(c.amount), 0);
   const manualDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
 
- const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
+  const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
   const dailyRate = basicSalary / daysInMonth;
   const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
-  
+
   const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(run.employee_id, run.month, run.year, dailyRate);
   const previousDue = await getPreviousDue(run.employee_id, run.month, run.year);
 
