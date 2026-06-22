@@ -649,6 +649,9 @@ await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS working_d
     await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS extra_working_days NUMERIC(5,1) DEFAULT 0`);
     console.log('✅ Payroll working_days columns ready');
 
+await pool.query(`ALTER TABLE hr_payroll_payments ADD COLUMN IF NOT EXISTS proof_url TEXT`);
+    console.log('✅ Payroll payments proof_url column ready');
+
 // Office Holidays
     await pool.query(`
       CREATE TABLE IF NOT EXISTS hr_office_holidays (

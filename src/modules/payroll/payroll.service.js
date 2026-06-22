@@ -282,7 +282,7 @@ const finalizeAllDrafts = async (month, year, finalizedByEmployeeId) => {
 // ===== Step 4: Payment (partial or full, allowed any time after draft) =====
 
 const recordPayment = async (payrollRunId, data, paidByEmployeeId, createdByUserId) => {
-  const { amount, payment_date, note } = data;
+ const { amount, payment_date, note, proof_url } = data;
   if (!amount || parseFloat(amount) <= 0) throw { statusCode: 400, message: 'সঠিক পরিমাণ দিন' };
 
   const runResult = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [payrollRunId]);
@@ -310,10 +310,10 @@ const recordPayment = async (payrollRunId, data, paidByEmployeeId, createdByUser
     credit_account_id: settings.payment_account_id,
   }, createdByUserId, null);
 
-  const paymentResult = await query(
-    `INSERT INTO hr_payroll_payments (payroll_run_id, amount, payment_date, note, accounting_transaction_id, paid_by)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [payrollRunId, amount, payment_date || new Date().toISOString().split('T')[0], note || null, txn.id, paidByEmployeeId]
+const paymentResult = await query(
+    `INSERT INTO hr_payroll_payments (payroll_run_id, amount, payment_date, note, accounting_transaction_id, paid_by, proof_url)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [payrollRunId, amount, payment_date || new Date().toISOString().split('T')[0], note || null, txn.id, paidByEmployeeId, proof_url || null]
   );
 
   const newTotalPaid = parseFloat(run.total_paid) + parseFloat(amount);
