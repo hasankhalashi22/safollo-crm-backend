@@ -649,6 +649,18 @@ await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS working_d
     await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS extra_working_days NUMERIC(5,1) DEFAULT 0`);
     console.log('✅ Payroll working_days columns ready');
 
+// Office Holidays
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_office_holidays (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        date DATE NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        name_bn VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Office holidays table ready');
+
 // Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
     const employeeRoleCheck = await pool.query("SELECT id FROM roles WHERE name = 'employee'");
     if (employeeRoleCheck.rows.length === 0) {
