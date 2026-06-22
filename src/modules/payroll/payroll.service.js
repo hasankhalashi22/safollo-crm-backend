@@ -2,7 +2,7 @@ const { query } = require('../../config/database');
 const transactionsService = require('../accounting/transactions.service');
 const attendanceService = require('../attendance/attendance.service');
 
-// ===== Salary Components (per-employee allowance/deduction) =====
+// ===== Salary Components =====
 
 const getEmployeeComponents = async (employeeId) => {
   const result = await query(
@@ -50,25 +50,20 @@ const updateSettings = async (data) => {
   return result.rows[0];
 };
 
+// ===== Working Days Calculation =====
 
-// Calculate working days, paid leave days, office holidays, and extra working days
 const calculateWorkingDays = async (employeeId, month, year) => {
-  const empResult = await query(
-    'SELECT weekly_off_day FROM hr_employees WHERE id = $1',
-    [employeeId]
-  );
+  const empResult = await query('SELECT weekly_off_day FROM hr_employees WHERE id = $1', [employeeId]);
   const weeklyOffDay = empResult.rows[0]?.weekly_off_day;
-
   const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-  // Get all days in the month
   const daysInMonth = new Date(year, month, 0).getDate();
+
   const allDays = Array.from({ length: daysInMonth }, (_, i) => {
     const d = new Date(year, month - 1, i + 1);
-    return { date: d, dayName: dayNames[d.getDay()] };
+    return { dateStr: d.toISOString().split('T')[0], dayName: dayNames[d.getDay()] };
   });
 
-  // Get actual attendance days (check-in করা দিন)
+  // Actual attendance দিন
   const attendanceResult = await query(
     `SELECT date FROM hr_attendance
      WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
@@ -77,17 +72,17 @@ const calculateWorkingDays = async (employeeId, month, year) => {
   );
   const attendanceDates = new Set(attendanceResult.rows.map(r => r.date.toISOString().split('T')[0]));
 
-  // Get approved paid leave days
+  // Approved Paid Leave দিন
   const paidLeaveResult = await query(
-    `SELECT la.start_date, la.end_date, COALESCE(la.modified_start_date, la.start_date) as eff_start,
+    `SELECT COALESCE(la.modified_start_date, la.start_date) as eff_start,
             COALESCE(la.modified_end_date, la.end_date) as eff_end
      FROM hr_leave_applications la
      JOIN hr_leave_types lt ON lt.id = la.leave_type_id
      WHERE la.employee_id = $1 AND la.status = 'approved' AND lt.is_paid = TRUE
-       AND EXTRACT(MONTH FROM la.start_date) = $2 AND EXTRACT(YEAR FROM la.start_date) = $3`,
+       AND (EXTRACT(MONTH FROM la.start_date) = $2 OR EXTRACT(MONTH FROM la.end_date) = $2)
+       AND (EXTRACT(YEAR FROM la.start_date) = $3 OR EXTRACT(YEAR FROM la.end_date) = $3)`,
     [employeeId, month, year]
   );
-
   const paidLeaveDates = new Set();
   for (const leave of paidLeaveResult.rows) {
     const start = new Date(leave.eff_start);
@@ -99,7 +94,7 @@ const calculateWorkingDays = async (employeeId, month, year) => {
     }
   }
 
-  // Get office holidays this month
+  // Office Holiday দিন
   const holidayResult = await query(
     `SELECT date FROM hr_office_holidays
      WHERE EXTRACT(MONTH FROM date) = $1 AND EXTRACT(YEAR FROM date) = $2`,
@@ -107,86 +102,55 @@ const calculateWorkingDays = async (employeeId, month, year) => {
   );
   const holidayDates = new Set(holidayResult.rows.map(r => r.date.toISOString().split('T')[0]));
 
-  let workingDays = 0;
+  let attendanceDays = 0;
+  let weeklyOffDays = 0;
+  let holidayDays = 0;
+  let paidLeaveDays = 0;
   let extraWorkingDays = 0;
 
-  for (const { date, dayName } of allDays) {
-    const dateStr = date.toISOString().split('T')[0];
+  for (const { dateStr, dayName } of allDays) {
     const isWeeklyOff = weeklyOffDay && dayName === weeklyOffDay;
     const isPresent = attendanceDates.has(dateStr);
     const isPaidLeave = paidLeaveDates.has(dateStr);
     const isHoliday = holidayDates.has(dateStr);
 
     if (isWeeklyOff) {
-      if (isPresent) extraWorkingDays++; // কাজ করেছে ছুটির দিনে
+      if (isPresent) {
+        extraWorkingDays++;
+      } else {
+        weeklyOffDays++;
+      }
       continue;
     }
 
-    // Regular working day
-    if (isPresent || isPaidLeave || isHoliday) {
-      workingDays++;
+    if (isPresent) {
+      attendanceDays++;
+    } else if (isPaidLeave) {
+      paidLeaveDays++;
+    } else if (isHoliday) {
+      holidayDays++;
     }
   }
 
-  return { workingDays, extraWorkingDays, daysInMonth };
+  const workingDays = attendanceDays + weeklyOffDays + holidayDays + paidLeaveDays + extraWorkingDays;
+
+  return { workingDays, attendanceDays, weeklyOffDays, holidayDays, paidLeaveDays, extraWorkingDays, daysInMonth };
 };
 
+// ===== Previous Due =====
 
-// ===== Step 1: Prepare (draft) =====
-
-const calculateUnpaidLeaveDeduction = async (employeeId, month, year, dailyRate) => {
-  // Get unpaid leave applications for this month
-  const leaveResult = await query(
-    `SELECT la.start_date, la.end_date,
-            COALESCE(la.modified_start_date, la.start_date) as eff_start,
-            COALESCE(la.modified_end_date, la.end_date) as eff_end
-     FROM hr_leave_applications la
-     JOIN hr_leave_types lt ON lt.id = la.leave_type_id
-     WHERE la.employee_id = $1 AND la.status = 'approved' AND lt.is_paid = FALSE
-       AND EXTRACT(MONTH FROM la.start_date) = $2 AND EXTRACT(YEAR FROM la.start_date) = $3`,
-    [employeeId, month, year]
-  );
-
-  if (leaveResult.rows.length === 0) return { days: 0, deduction: 0 };
-
-  // Get actual attendance days (check-in করা দিন) — এই দিনগুলোতে unpaid leave deduction হবে না
-  const attendanceResult = await query(
-    `SELECT date FROM hr_attendance
-     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
-     AND check_in_time IS NOT NULL`,
-    [employeeId, month, year]
-  );
-  const attendanceDates = new Set(attendanceResult.rows.map(r => r.date.toISOString().split('T')[0]));
-
-  // Count unpaid leave days excluding days where employee actually checked in
-  let totalDays = 0;
-  for (const leave of leaveResult.rows) {
-    const start = new Date(leave.eff_start);
-    const end = new Date(leave.eff_end);
-    const current = new Date(start);
-    while (current <= end) {
-      const dateStr = current.toISOString().split('T')[0];
-      if (!attendanceDates.has(dateStr)) {
-        totalDays++;
-      }
-      current.setDate(current.getDate() + 1);
-    }
-  }
-
-  return { days: totalDays, deduction: totalDays * dailyRate };
-};
 const getPreviousDue = async (employeeId, month, year) => {
-  // Previous calendar month
   let prevMonth = month - 1;
   let prevYear = year;
   if (prevMonth === 0) { prevMonth = 12; prevYear -= 1; }
-
   const result = await query(
     `SELECT due_amount FROM hr_payroll_runs WHERE employee_id = $1 AND month = $2 AND year = $3`,
     [employeeId, prevMonth, prevYear]
   );
   return result.rows.length > 0 ? parseFloat(result.rows[0].due_amount) || 0 : 0;
 };
+
+// ===== Step 1: Prepare (draft) =====
 
 const prepareMonth = async (month, year) => {
   const employeesResult = await query(
@@ -205,25 +169,20 @@ const prepareMonth = async (month, year) => {
       `SELECT * FROM hr_payroll_runs WHERE employee_id = $1 AND month = $2 AND year = $3`,
       [emp.id, month, year]
     );
-    if (existing.rows.length > 0) { created.push(existing.rows[0]); continue; } // already prepared, return existing
+    if (existing.rows.length > 0) { created.push(existing.rows[0]); continue; }
 
-const basicSalary = parseFloat(emp.basic_salary) || 0;
-
+    const basicSalary = parseFloat(emp.basic_salary) || 0;
     const components = await getEmployeeComponents(emp.id);
     const totalAllowances = components.filter(c => c.type === 'allowance').reduce((s, c) => s + parseFloat(c.amount), 0);
     const manualDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
 
-    // Working days calculation
-    const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(emp.id, month, year);
+    const { workingDays, attendanceDays, weeklyOffDays, holidayDays, paidLeaveDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(emp.id, month, year);
     const dailyRate = basicSalary / daysInMonth;
+    const earnedSalary = dailyRate * workingDays;
 
-    // Base salary = daily rate × (working days + extra working days)
-    const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
-
-    const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(emp.id, month, year, dailyRate);
     const previousDue = await getPreviousDue(emp.id, month, year);
 
-    // Daily attendance penalties
+    // Attendance penalties
     const dailyPenaltyResult = await query(
       `SELECT COALESCE(SUM(penalty_amount), 0) as total FROM hr_attendance
        WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3 AND is_waived = FALSE`,
@@ -231,34 +190,33 @@ const basicSalary = parseFloat(emp.basic_salary) || 0;
     );
     const dailyAttendancePenalty = parseFloat(dailyPenaltyResult.rows[0].total) || 0;
 
-    // Pattern-based penalties
     const pattern = await attendanceService.calculatePatternPenalties(emp.id, month, year);
     const patternDeductionDays = pattern.extra_absent_days + pattern.monthly_late_deduction_days;
     const patternDeductionAmount = patternDeductionDays * dailyRate;
 
     const totalAttendanceDeduction = dailyAttendancePenalty + patternDeductionAmount;
     const totalDeductions = manualDeductions + totalAttendanceDeduction;
-
-    const netPayable = earnedSalary + totalAllowances - totalDeductions - unpaidDeduction + previousDue;
+    const netPayable = earnedSalary + totalAllowances - totalDeductions + previousDue;
 
     const result = await query(
       `INSERT INTO hr_payroll_runs
          (employee_id, month, year, basic_salary, total_allowances, total_deductions,
           unpaid_leave_days, unpaid_leave_deduction, previous_due, attendance_deduction,
-          working_days, extra_working_days, net_payable, total_paid, due_amount, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,$13,'draft') RETURNING *`,
+          working_days, extra_working_days, attendance_days, weekly_off_days, holiday_days, paid_leave_days,
+          net_payable, total_paid, due_amount, status)
+       VALUES ($1,$2,$3,$4,$5,$6,0,0,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,$15,'draft') RETURNING *`,
       [emp.id, month, year, basicSalary, totalAllowances, totalDeductions,
-       unpaidDays, unpaidDeduction, previousDue, totalAttendanceDeduction,
-       workingDays, extraWorkingDays, netPayable]
+       previousDue, totalAttendanceDeduction,
+       workingDays, extraWorkingDays, attendanceDays, weeklyOffDays, holidayDays, paidLeaveDays,
+       netPayable]
     );
-
     created.push(result.rows[0]);
   }
 
   return created;
 };
 
-// ===== Step 2: Edit draft (manual override) =====
+// ===== Step 2: Edit draft =====
 
 const updateDraftRun = async (id, data) => {
   const existing = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [id]);
@@ -266,40 +224,39 @@ const updateDraftRun = async (id, data) => {
   if (existing.rows[0].status !== 'draft') throw { statusCode: 400, message: 'শুধুমাত্র draft অবস্থায় edit করা যাবে' };
 
   const run = existing.rows[0];
-  const { basic_salary, total_allowances, total_deductions, unpaid_leave_deduction, previous_due } = data;
+  const { basic_salary, total_allowances, total_deductions, previous_due } = data;
 
   const basic = basic_salary !== undefined ? parseFloat(basic_salary) : parseFloat(run.basic_salary);
   const allow = total_allowances !== undefined ? parseFloat(total_allowances) : parseFloat(run.total_allowances);
   const ded = total_deductions !== undefined ? parseFloat(total_deductions) : parseFloat(run.total_deductions);
-  const unpaidDed = unpaid_leave_deduction !== undefined ? parseFloat(unpaid_leave_deduction) : parseFloat(run.unpaid_leave_deduction);
   const prevDue = previous_due !== undefined ? parseFloat(previous_due) : parseFloat(run.previous_due);
 
-  // Working days × daily rate for earned salary (same logic as recalculate)
   const workingDays = parseFloat(run.working_days) || 0;
-  const extraWorkingDays = parseFloat(run.extra_working_days) || 0;
   const daysInMonth = new Date(run.year, run.month, 0).getDate();
   const dailyRate = basic / daysInMonth;
-  const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
+  const earnedSalary = dailyRate * workingDays;
 
-  const netPayable = earnedSalary + allow - ded - unpaidDed + prevDue;
+  const netPayable = earnedSalary + allow - ded + prevDue;
   const dueAmount = netPayable - parseFloat(run.total_paid);
 
   const result = await query(
     `UPDATE hr_payroll_runs SET
        basic_salary = $1, total_allowances = $2, total_deductions = $3,
-       unpaid_leave_deduction = $4, previous_due = $5, net_payable = $6, due_amount = $7
-     WHERE id = $8 RETURNING *`,
-    [basic, allow, ded, unpaidDed, prevDue, netPayable, dueAmount, id]
+       previous_due = $4, net_payable = $5, due_amount = $6
+     WHERE id = $7 RETURNING *`,
+    [basic, allow, ded, prevDue, netPayable, dueAmount, id]
   );
   return result.rows[0];
 };
+
+// ===== Step 2b: Recalculate =====
+
 const recalculateRun = async (id) => {
   const existing = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [id]);
   if (existing.rows.length === 0) throw { statusCode: 404, message: 'Payroll record পাওয়া যায়নি' };
   if (existing.rows[0].status !== 'draft') throw { statusCode: 400, message: 'শুধুমাত্র draft অবস্থায় recalculate করা যাবে' };
 
   const run = existing.rows[0];
-
   const empResult = await query('SELECT basic_salary FROM hr_employees WHERE id = $1', [run.employee_id]);
   const basicSalary = parseFloat(empResult.rows[0]?.basic_salary) || 0;
 
@@ -307,11 +264,10 @@ const recalculateRun = async (id) => {
   const totalAllowances = components.filter(c => c.type === 'allowance').reduce((s, c) => s + parseFloat(c.amount), 0);
   const manualDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
 
-  const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
+  const { workingDays, attendanceDays, weeklyOffDays, holidayDays, paidLeaveDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(run.employee_id, run.month, run.year);
   const dailyRate = basicSalary / daysInMonth;
-  const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
+  const earnedSalary = dailyRate * workingDays;
 
-  const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(run.employee_id, run.month, run.year, dailyRate);
   const previousDue = await getPreviousDue(run.employee_id, run.month, run.year);
 
   const dailyPenaltyResult = await query(
@@ -327,18 +283,20 @@ const recalculateRun = async (id) => {
 
   const totalAttendanceDeduction = dailyAttendancePenalty + patternDeductionAmount;
   const totalDeductions = manualDeductions + totalAttendanceDeduction;
-  const netPayable = earnedSalary + totalAllowances - totalDeductions - unpaidDeduction + previousDue;
+  const netPayable = earnedSalary + totalAllowances - totalDeductions + previousDue;
   const dueAmount = netPayable - parseFloat(run.total_paid);
 
   const result = await query(
     `UPDATE hr_payroll_runs SET
        basic_salary = $1, total_allowances = $2, total_deductions = $3,
-       unpaid_leave_days = $4, unpaid_leave_deduction = $5, previous_due = $6,
-       attendance_deduction = $7, working_days = $8, extra_working_days = $9,
-       net_payable = $10, due_amount = $11
-     WHERE id = $12 RETURNING *`,
-    [basicSalary, totalAllowances, totalDeductions, unpaidDays, unpaidDeduction,
-     previousDue, totalAttendanceDeduction, workingDays, extraWorkingDays,
+       unpaid_leave_days = 0, unpaid_leave_deduction = 0, previous_due = $4,
+       attendance_deduction = $5, working_days = $6, extra_working_days = $7,
+       attendance_days = $8, weekly_off_days = $9, holiday_days = $10, paid_leave_days = $11,
+       net_payable = $12, due_amount = $13
+     WHERE id = $14 RETURNING *`,
+    [basicSalary, totalAllowances, totalDeductions, previousDue,
+     totalAttendanceDeduction, workingDays, extraWorkingDays,
+     attendanceDays, weeklyOffDays, holidayDays, paidLeaveDays,
      netPayable, dueAmount, id]
   );
   return result.rows[0];
@@ -365,10 +323,10 @@ const finalizeAllDrafts = async (month, year, finalizedByEmployeeId) => {
   return result.rows;
 };
 
-// ===== Step 4: Payment (partial or full, allowed any time after draft) =====
+// ===== Step 4: Payment =====
 
 const recordPayment = async (payrollRunId, data, paidByEmployeeId, createdByUserId) => {
- const { amount, payment_date, note, proof_url } = data;
+  const { amount, payment_date, note, proof_url } = data;
   if (!amount || parseFloat(amount) <= 0) throw { statusCode: 400, message: 'সঠিক পরিমাণ দিন' };
 
   const runResult = await query('SELECT * FROM hr_payroll_runs WHERE id = $1', [payrollRunId]);
@@ -383,7 +341,6 @@ const recordPayment = async (payrollRunId, data, paidByEmployeeId, createdByUser
   const empNameResult = await query('SELECT full_name FROM hr_employees WHERE id = $1', [run.employee_id]);
   const empName = empNameResult.rows[0]?.full_name || '';
 
-  // Decide which account to debit: if already closed (liability recorded), debit the payable account; otherwise debit expense account
   const debitAccountId = run.closed_at ? settings.salary_payable_account_id : settings.salary_expense_account_id;
   if (!debitAccountId) throw { statusCode: 400, message: 'Payroll Settings-এ প্রয়োজনীয় account সেট করুন' };
 
@@ -396,7 +353,7 @@ const recordPayment = async (payrollRunId, data, paidByEmployeeId, createdByUser
     credit_account_id: settings.payment_account_id,
   }, createdByUserId, null);
 
-const paymentResult = await query(
+  const paymentResult = await query(
     `INSERT INTO hr_payroll_payments (payroll_run_id, amount, payment_date, note, accounting_transaction_id, paid_by, proof_url)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
     [payrollRunId, amount, payment_date || new Date().toISOString().split('T')[0], note || null, txn.id, paidByEmployeeId, proof_url || null]
@@ -421,7 +378,7 @@ const getPayments = async (payrollRunId) => {
   return result.rows;
 };
 
-// ===== Step 5: Close month (record remaining due as payable liability) =====
+// ===== Step 5: Close month =====
 
 const closeMonth = async (month, year, closedByEmployeeId, createdByUserId) => {
   const settings = await getSettings();
@@ -440,9 +397,6 @@ const closeMonth = async (month, year, closedByEmployeeId, createdByUserId) => {
 
   for (const run of runsResult.rows) {
     const due = parseFloat(run.due_amount);
-
-    // Record the full expense for this employee (the amount earned this month, regardless of paid/due)
-    // and move the unpaid portion to a payable liability.
     if (due > 0) {
       const txn = await transactionsService.createTransaction({
         transaction_date: new Date().toISOString().split('T')[0],
@@ -454,8 +408,7 @@ const closeMonth = async (month, year, closedByEmployeeId, createdByUserId) => {
       }, createdByUserId, null);
 
       await query(
-        `UPDATE hr_payroll_runs SET status = 'closed', closed_at = NOW(), closed_by = $1, payable_transaction_id = $2
-         WHERE id = $3`,
+        `UPDATE hr_payroll_runs SET status = 'closed', closed_at = NOW(), closed_by = $1, payable_transaction_id = $2 WHERE id = $3`,
         [closedByEmployeeId, txn.id, run.id]
       );
     } else {
