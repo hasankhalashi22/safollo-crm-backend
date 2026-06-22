@@ -312,10 +312,31 @@ const setEmployeeModuleAccess = async (employeeId, accessList) => {
   return getEmployeeModuleAccess(employeeId);
 };
 
+const getHolidays = async (year) => {
+  const y = year || new Date().getFullYear();
+  const result = await query(
+    `SELECT * FROM hr_office_holidays WHERE EXTRACT(YEAR FROM date) = $1 ORDER BY date ASC`,
+    [y]
+  );
+  return result.rows;
+};
+
+const createHoliday = async (data) => {
+  const { date, name, name_bn } = data;
+  if (!date || !name) throw { statusCode: 400, message: 'তারিখ ও নাম দিন' };
+  const result = await query(
+    `INSERT INTO hr_office_holidays (date, name, name_bn) VALUES ($1,$2,$3) RETURNING *`,
+    [date, name, name_bn || null]
+  );
+  return result.rows[0];
+};
+
+const deleteHoliday = async (id) => {
+  await query('DELETE FROM hr_office_holidays WHERE id = $1', [id]);
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
-  getPositions, createPosition, updatePosition, deletePosition,
-  getOrganogram,
-  getNotices, createNotice, deleteNotice,
+  getPositions, createPosition, updatePosition, deletePosition, getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
 };

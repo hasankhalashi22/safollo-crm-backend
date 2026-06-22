@@ -26,6 +26,9 @@ router.patch('/positions/:id', hrController.updatePosition);
 router.delete('/positions/:id', hrController.deletePosition);
 
 router.get('/organogram', hrController.getOrganogram);
+router.get('/holidays', hrController.getHolidays);
+router.post('/holidays', hrController.createHoliday);
+router.delete('/holidays/:id', hrController.deleteHoliday);
 
 router.get('/notices', hrController.getNotices);
 router.post('/notices', hrController.createNotice);

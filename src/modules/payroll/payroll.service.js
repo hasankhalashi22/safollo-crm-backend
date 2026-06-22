@@ -50,6 +50,88 @@ const updateSettings = async (data) => {
   return result.rows[0];
 };
 
+
+// Calculate working days, paid leave days, office holidays, and extra working days
+const calculateWorkingDays = async (employeeId, month, year) => {
+  const empResult = await query(
+    'SELECT weekly_off_day FROM hr_employees WHERE id = $1',
+    [employeeId]
+  );
+  const weeklyOffDay = empResult.rows[0]?.weekly_off_day;
+
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+  // Get all days in the month
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const allDays = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = new Date(year, month - 1, i + 1);
+    return { date: d, dayName: dayNames[d.getDay()] };
+  });
+
+  // Get actual attendance days (check-in করা দিন)
+  const attendanceResult = await query(
+    `SELECT date FROM hr_attendance
+     WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+     AND check_in_time IS NOT NULL`,
+    [employeeId, month, year]
+  );
+  const attendanceDates = new Set(attendanceResult.rows.map(r => r.date.toISOString().split('T')[0]));
+
+  // Get approved paid leave days
+  const paidLeaveResult = await query(
+    `SELECT la.start_date, la.end_date, COALESCE(la.modified_start_date, la.start_date) as eff_start,
+            COALESCE(la.modified_end_date, la.end_date) as eff_end
+     FROM hr_leave_applications la
+     JOIN hr_leave_types lt ON lt.id = la.leave_type_id
+     WHERE la.employee_id = $1 AND la.status = 'approved' AND lt.is_paid = TRUE
+       AND EXTRACT(MONTH FROM la.start_date) = $2 AND EXTRACT(YEAR FROM la.start_date) = $3`,
+    [employeeId, month, year]
+  );
+
+  const paidLeaveDates = new Set();
+  for (const leave of paidLeaveResult.rows) {
+    const start = new Date(leave.eff_start);
+    const end = new Date(leave.eff_end);
+    const current = new Date(start);
+    while (current <= end) {
+      paidLeaveDates.add(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+  }
+
+  // Get office holidays this month
+  const holidayResult = await query(
+    `SELECT date FROM hr_office_holidays
+     WHERE EXTRACT(MONTH FROM date) = $1 AND EXTRACT(YEAR FROM date) = $2`,
+    [month, year]
+  );
+  const holidayDates = new Set(holidayResult.rows.map(r => r.date.toISOString().split('T')[0]));
+
+  let workingDays = 0;
+  let extraWorkingDays = 0;
+
+  for (const { date, dayName } of allDays) {
+    const dateStr = date.toISOString().split('T')[0];
+    const isWeeklyOff = weeklyOffDay && dayName === weeklyOffDay;
+    const isPresent = attendanceDates.has(dateStr);
+    const isPaidLeave = paidLeaveDates.has(dateStr);
+    const isHoliday = holidayDates.has(dateStr);
+
+    if (isWeeklyOff) {
+      if (isPresent) extraWorkingDays++; // কাজ করেছে ছুটির দিনে
+      continue;
+    }
+
+    // Regular working day
+    if (isPresent || isPaidLeave || isHoliday) {
+      workingDays++;
+    }
+  }
+
+  return { workingDays, extraWorkingDays, daysInMonth };
+};
+
+
 // ===== Step 1: Prepare (draft) =====
 
 const calculateUnpaidLeaveDeduction = async (employeeId, month, year, dailyRate) => {
@@ -97,17 +179,23 @@ const prepareMonth = async (month, year) => {
     );
     if (existing.rows.length > 0) { created.push(existing.rows[0]); continue; } // already prepared, return existing
 
-   const basicSalary = parseFloat(emp.basic_salary) || 0;
-    const dailyRate = basicSalary / 30;
+const basicSalary = parseFloat(emp.basic_salary) || 0;
 
     const components = await getEmployeeComponents(emp.id);
     const totalAllowances = components.filter(c => c.type === 'allowance').reduce((s, c) => s + parseFloat(c.amount), 0);
     const manualDeductions = components.filter(c => c.type === 'deduction').reduce((s, c) => s + parseFloat(c.amount), 0);
 
+    // Working days calculation
+    const { workingDays, extraWorkingDays, daysInMonth } = await calculateWorkingDays(emp.id, month, year);
+    const dailyRate = basicSalary / daysInMonth;
+
+    // Base salary = daily rate × (working days + extra working days)
+    const earnedSalary = dailyRate * (workingDays + extraWorkingDays);
+
     const { days: unpaidDays, deduction: unpaidDeduction } = await calculateUnpaidLeaveDeduction(emp.id, month, year, dailyRate);
     const previousDue = await getPreviousDue(emp.id, month, year);
 
-    // Daily attendance penalties (sum of penalty_amount from each day, excluding waived days)
+    // Daily attendance penalties
     const dailyPenaltyResult = await query(
       `SELECT COALESCE(SUM(penalty_amount), 0) as total FROM hr_attendance
        WHERE employee_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3 AND is_waived = FALSE`,
@@ -115,7 +203,7 @@ const prepareMonth = async (month, year) => {
     );
     const dailyAttendancePenalty = parseFloat(dailyPenaltyResult.rows[0].total) || 0;
 
-    // Pattern-based penalties (consecutive late -> extra absent days, monthly late threshold deduction)
+    // Pattern-based penalties
     const pattern = await attendanceService.calculatePatternPenalties(emp.id, month, year);
     const patternDeductionDays = pattern.extra_absent_days + pattern.monthly_late_deduction_days;
     const patternDeductionAmount = patternDeductionDays * dailyRate;
@@ -123,15 +211,19 @@ const prepareMonth = async (month, year) => {
     const totalAttendanceDeduction = dailyAttendancePenalty + patternDeductionAmount;
     const totalDeductions = manualDeductions + totalAttendanceDeduction;
 
-    const netPayable = basicSalary + totalAllowances - totalDeductions - unpaidDeduction + previousDue;
+    const netPayable = earnedSalary + totalAllowances - totalDeductions - unpaidDeduction + previousDue;
 
     const result = await query(
       `INSERT INTO hr_payroll_runs
          (employee_id, month, year, basic_salary, total_allowances, total_deductions,
-          unpaid_leave_days, unpaid_leave_deduction, previous_due, attendance_deduction, net_payable, total_paid, due_amount, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$11,'draft') RETURNING *`,
-      [emp.id, month, year, basicSalary, totalAllowances, totalDeductions, unpaidDays, unpaidDeduction, previousDue, totalAttendanceDeduction, netPayable]
+          unpaid_leave_days, unpaid_leave_deduction, previous_due, attendance_deduction,
+          working_days, extra_working_days, net_payable, total_paid, due_amount, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,$13,'draft') RETURNING *`,
+      [emp.id, month, year, basicSalary, totalAllowances, totalDeductions,
+       unpaidDays, unpaidDeduction, previousDue, totalAttendanceDeduction,
+       workingDays, extraWorkingDays, netPayable]
     );
+
     created.push(result.rows[0]);
   }
 
