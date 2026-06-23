@@ -551,16 +551,43 @@ const closeMonth = async (month, year, closedByEmployeeId, createdByUserId) => {
 
 // ===== Listing =====
 
-const getPayrollRuns = async (month, year) => {
+const getPayrollRuns = async ({ month, year, employeeId, dateFrom, dateTo } = {}) => {
+  const conditions = [`r.name IS DISTINCT FROM 'super_admin'`];
+  const params = [];
+  let idx = 1;
+
+  if (month && year) {
+    conditions.push(`pr.month = $${idx++} AND pr.year = $${idx++}`);
+    params.push(month, year);
+  }
+  if (employeeId) {
+    conditions.push(`pr.employee_id = $${idx++}`);
+    params.push(employeeId);
+  }
+  if (dateFrom) {
+    const d = new Date(dateFrom);
+    conditions.push(`(pr.year > $${idx} OR (pr.year = $${idx} AND pr.month >= $${idx+1}))`);
+    params.push(d.getFullYear(), d.getMonth() + 1);
+    idx += 2;
+  }
+  if (dateTo) {
+    const d = new Date(dateTo);
+    conditions.push(`(pr.year < $${idx} OR (pr.year = $${idx} AND pr.month <= $${idx+1}))`);
+    params.push(d.getFullYear(), d.getMonth() + 1);
+    idx += 2;
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
   const result = await query(
     `SELECT pr.*, he.full_name, he.designation, he.department, he.phone
      FROM hr_payroll_runs pr
      JOIN hr_employees he ON he.id = pr.employee_id
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
-     WHERE pr.month = $1 AND pr.year = $2 AND r.name IS DISTINCT FROM 'super_admin'
-     ORDER BY he.full_name ASC`,
-    [month, year]
+     ${where}
+     ORDER BY pr.year DESC, pr.month DESC, he.full_name ASC`,
+    params
   );
   return result.rows;
 };

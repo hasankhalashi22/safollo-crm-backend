@@ -99,7 +99,13 @@ const closeMonth = async (req, res, next) => {
 
 const getPayrollRuns = async (req, res, next) => {
   try {
-    const result = await payrollService.getPayrollRuns(req.query.month, req.query.year);
+    const result = await payrollService.getPayrollRuns({
+      month: req.query.month,
+      year: req.query.year,
+      employeeId: req.query.employeeId,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+    });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 };
