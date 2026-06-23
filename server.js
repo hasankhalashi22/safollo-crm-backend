@@ -670,6 +670,12 @@ await pool.query(`ALTER TABLE hr_payroll_runs ADD COLUMN IF NOT EXISTS attendanc
     `);
     console.log('✅ Office holidays table ready');
 
+await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS duration_type VARCHAR(20) DEFAULT 'full_day'`);
+    await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS end_date DATE`);
+    await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS start_time TIME`);
+    await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS end_time TIME`);
+    console.log('✅ Office holidays duration columns ready');
+
 // Ensure a basic 'employee' role exists for non-CRM staff (ESS portal only, no module access by default)
     const employeeRoleCheck = await pool.query("SELECT id FROM roles WHERE name = 'employee'");
     if (employeeRoleCheck.rows.length === 0) {
