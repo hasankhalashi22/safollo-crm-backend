@@ -163,10 +163,32 @@ const deleteHoliday = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const linkEssUser = async (req, res, next) => {
+  try {
+    const result = await hrService.linkEssUser(req.params.id, req.body.user_id);
+    res.json({ success: true, data: result, message: 'ESS Access লিঙ্ক হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const unlinkEssUser = async (req, res, next) => {
+  try {
+    const result = await hrService.unlinkEssUser(req.params.id);
+    res.json({ success: true, data: result, message: 'ESS Access সরানো হয়েছে' });
+  } catch (err) { next(err); }
+};
+
+const createEssLogin = async (req, res, next) => {
+  try {
+    const result = await hrService.createEssLogin(req.params.id, req.user.id);
+    res.status(201).json({ success: true, data: result, message: 'ESS Login তৈরি হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   uploadPhoto, uploadNid, uploadSignature,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition,
   getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
+  linkEssUser, unlinkEssUser, createEssLogin,
 };

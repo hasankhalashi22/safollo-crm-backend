@@ -82,6 +82,12 @@ const verifyOtp = async (phone, code, deviceInfo) => {
     [user.id]
   );
 
+  const otpEssResult = await query(
+    `SELECT id FROM hr_employees WHERE user_id = $1`,
+    [user.id]
+  );
+  const otpHasEss = otpEssResult.rows.length > 0;
+
   return {
     token,
     user: {
@@ -94,6 +100,8 @@ const verifyOtp = async (phone, code, deviceInfo) => {
       is_profile_complete: user.is_profile_complete,
       is_first_login: user.is_first_login,
       module_access: otpModuleAccessResult.rows,
+      has_ess: otpHasEss,
+      employee_id: otpHasEss ? otpEssResult.rows[0].id : null,
     },
   };
 };
@@ -174,6 +182,13 @@ const moduleAccessResult = await query(
     [user.id]
   );
 
+  const essResult = await query(
+    `SELECT id FROM hr_employees WHERE user_id = $1`,
+    [user.id]
+  );
+  const hasEss = essResult.rows.length > 0;
+  const employeeId = hasEss ? essResult.rows[0].id : null;
+
   return {
     token,
     user: {
@@ -186,6 +201,8 @@ const moduleAccessResult = await query(
       is_profile_complete: user.is_profile_complete,
       is_first_login: user.is_first_login,
       module_access: moduleAccessResult.rows,
+      has_ess: hasEss,
+      employee_id: employeeId,
     },
   };
 };
@@ -242,7 +259,14 @@ const getMe = async (userId) => {
     throw { statusCode: 404, message: 'ব্যবহারকারী পাওয়া যায়নি' };
   }
 
-  return result.rows[0];
+  const essResult = await query(
+    `SELECT id FROM hr_employees WHERE user_id = $1`, [userId]
+  );
+  const userData = result.rows[0];
+  userData.has_ess = essResult.rows.length > 0;
+  userData.employee_id = userData.has_ess ? essResult.rows[0].id : null;
+
+  return userData;
 };
 
 module.exports = { sendOtp, verifyOtp, verifyOtpFirstLogin, setPassword, loginWithPassword, changePassword, resetPassword, logout, getMe };

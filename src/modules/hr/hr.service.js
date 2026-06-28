@@ -336,8 +336,53 @@ const deleteHoliday = async (id) => {
   await query('DELETE FROM hr_office_holidays WHERE id = $1', [id]);
 };
 
+// Link existing CRM user to employee record (grants ESS access)
+const linkEssUser = async (employeeId, userId) => {
+  const existing = await query('SELECT id FROM hr_employees WHERE user_id = $1 AND id != $2', [userId, employeeId]);
+  if (existing.rows.length > 0) {
+    throw { statusCode: 409, message: 'এই CRM User আরেকজন কর্মীর সাথে লিঙ্ক করা আছে' };
+  }
+  const result = await query(
+    'UPDATE hr_employees SET user_id = $1 WHERE id = $2 RETURNING *',
+    [userId, employeeId]
+  );
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'কর্মী পাওয়া যায়নি' };
+  return result.rows[0];
+};
+
+// Remove ESS link (does not delete the CRM user, just unlinks)
+const unlinkEssUser = async (employeeId) => {
+  const result = await query(
+    'UPDATE hr_employees SET user_id = NULL WHERE id = $1 RETURNING *',
+    [employeeId]
+  );
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'কর্মী পাওয়া যায়নি' };
+  return result.rows[0];
+};
+
+// Create a basic ESS-only login for an employee who has no CRM account yet
+const createEssLogin = async (employeeId, createdBy) => {
+  const empResult = await query('SELECT * FROM hr_employees WHERE id = $1', [employeeId]);
+  if (empResult.rows.length === 0) throw { statusCode: 404, message: 'কর্মী পাওয়া যায়নি' };
+  const emp = empResult.rows[0];
+
+  if (emp.user_id) throw { statusCode: 409, message: 'এই কর্মীর ইতোমধ্যে একটি ESS Account আছে' };
+  if (!emp.phone) throw { statusCode: 400, message: 'ESS Account তৈরি করতে কর্মীর ফোন নম্বর আবশ্যক' };
+
+  const employeeRole = await query("SELECT id FROM roles WHERE name = 'employee'");
+  if (employeeRole.rows.length === 0) throw { statusCode: 500, message: "Employee role পাওয়া যায়নি" };
+
+  const newUser = await usersService.createUser(
+    { phone: emp.phone, role_id: employeeRole.rows[0].id, manager_id: null, joining_date: emp.joining_date || null },
+    createdBy
+  );
+  await query('UPDATE hr_employees SET user_id = $1 WHERE id = $2', [newUser.id, employeeId]);
+  return { user_id: newUser.id, phone: emp.phone };
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition, getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
+  linkEssUser, unlinkEssUser, createEssLogin,
 };
