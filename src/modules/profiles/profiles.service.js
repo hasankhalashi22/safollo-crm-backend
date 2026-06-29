@@ -27,6 +27,27 @@ const getProfile = async (userId) => {
   return result.rows[0];
 };
 
+// Fields that exist in both staff_profiles and hr_employees with the same name
+const HR_SYNC_FIELDS = [
+  'full_name', 'email', 'father_name', 'mother_name', 'date_of_birth',
+  'blood_group', 'gender', 'guardian_mobile', 'guardian_relation',
+  'present_address', 'permanent_address', 'education_level', 'education_details',
+  'nid_number', 'nid_image_url', 'nid_image_public_id',
+  'photo_url', 'photo_public_id', 'signature_url', 'signature_public_id',
+];
+
+const syncToHrEmployee = async (userId, data) => {
+  const syncData = {};
+  HR_SYNC_FIELDS.forEach(f => { if (f in data) syncData[f] = data[f]; });
+  if (Object.keys(syncData).length === 0) return;
+  const keys = Object.keys(syncData);
+  const setClause = keys.map((f, i) => `${f} = $${i + 2}`).join(', ');
+  await query(
+    `UPDATE hr_employees SET ${setClause}, updated_at = NOW() WHERE user_id = $1`,
+    [userId, ...keys.map(f => syncData[f])]
+  );
+};
+
 const updateProfile = async (userId, data) => {
   await checkProfileNotLocked(userId);
   Object.keys(data).forEach(key => { if (data[key] === '') data[key] = null; });
@@ -57,6 +78,9 @@ const updateProfile = async (userId, data) => {
     );
   }
 
+  // Sync overlapping fields to hr_employees if this user is linked
+  await syncToHrEmployee(userId, data);
+
   return profile;
 };
 
@@ -74,6 +98,8 @@ const uploadPhoto = async (userId, file) => {
     [file.path, file.filename, userId]
   );
 
+  await syncToHrEmployee(userId, { photo_url: file.path, photo_public_id: file.filename });
+
   return result.rows[0];
 };
 
@@ -90,6 +116,8 @@ const uploadNid = async (userId, file) => {
     [file.path, file.filename, userId]
   );
 
+  await syncToHrEmployee(userId, { nid_image_url: file.path, nid_image_public_id: file.filename });
+
   return result.rows[0];
 };
 
@@ -105,6 +133,8 @@ const uploadSignature = async (userId, file) => {
      WHERE user_id = $3 RETURNING signature_url`,
     [file.path, file.filename, userId]
   );
+
+  await syncToHrEmployee(userId, { signature_url: file.path, signature_public_id: file.filename });
 
   return result.rows[0];
 };
