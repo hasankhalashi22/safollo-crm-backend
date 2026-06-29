@@ -15,6 +15,7 @@ router.patch('/employees/:id', hrController.updateEmployee);
 router.delete('/employees/:id', hrController.deleteEmployee);
 router.get('/employees/:id/module-access', hrController.getEmployeeModuleAccess);
 router.put('/employees/:id/module-access', hrController.setEmployeeModuleAccess);
+router.post('/sync-profiles', hrController.syncProfiles);
 router.post('/employees/:id/link-ess', hrController.linkEssUser);
 router.delete('/employees/:id/link-ess', hrController.unlinkEssUser);
 router.post('/employees/:id/create-ess-login', hrController.createEssLogin);

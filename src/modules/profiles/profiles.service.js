@@ -42,22 +42,34 @@ const syncToHrEmployee = async (userId, data) => {
   if (Object.keys(syncData).length === 0) return;
   const keys = Object.keys(syncData);
   const setClause = keys.map((f, i) => `${f} = $${i + 2}`).join(', ');
-  await query(
-    `UPDATE hr_employees SET ${setClause}, updated_at = NOW() WHERE user_id = $1`,
-    [userId, ...keys.map(f => syncData[f])]
-  );
+  try {
+    await query(
+      `UPDATE hr_employees SET ${setClause} WHERE user_id = $1`,
+      [userId, ...keys.map(f => syncData[f])]
+    );
+  } catch (err) {
+    console.error('HR employee sync failed:', err.message);
+  }
 };
+
+const STAFF_PROFILE_FIELDS = [
+  'full_name', 'father_name', 'mother_name', 'date_of_birth', 'blood_group', 'gender',
+  'mobile_number', 'guardian_mobile', 'guardian_relation', 'email',
+  'present_address', 'permanent_address', 'education_level', 'education_details', 'nid_number',
+];
 
 const updateProfile = async (userId, data) => {
   await checkProfileNotLocked(userId);
-  Object.keys(data).forEach(key => { if (data[key] === '') data[key] = null; });
-  const fields = Object.keys(data);
+  // Only update columns that exist in staff_profiles
+  const filtered = {};
+  STAFF_PROFILE_FIELDS.forEach(f => { if (f in data) filtered[f] = data[f] === '' ? null : data[f]; });
+  const fields = Object.keys(filtered);
   if (fields.length === 0) {
     throw { statusCode: 400, message: 'কোনো তথ্য দেওয়া হয়নি' };
   }
 
   const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
-  const values = fields.map(f => data[f]);
+  const values = fields.map(f => filtered[f]);
 
   const result = await query(
     `UPDATE staff_profiles SET ${setClause}, updated_at = NOW()
@@ -79,7 +91,7 @@ const updateProfile = async (userId, data) => {
   }
 
   // Sync overlapping fields to hr_employees if this user is linked
-  await syncToHrEmployee(userId, data);
+  await syncToHrEmployee(userId, filtered);
 
   return profile;
 };

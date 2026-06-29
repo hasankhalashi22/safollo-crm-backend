@@ -384,5 +384,32 @@ module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition, getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
-  linkEssUser, unlinkEssUser, createEssLogin,
+  linkEssUser, unlinkEssUser, createEssLogin, syncAllProfilesFromStaffProfiles,
 };
+
+async function syncAllProfilesFromStaffProfiles() {
+  const result = await query(
+    `UPDATE hr_employees he
+     SET full_name       = COALESCE(sp.full_name, he.full_name),
+         father_name     = COALESCE(sp.father_name, he.father_name),
+         mother_name     = COALESCE(sp.mother_name, he.mother_name),
+         date_of_birth   = COALESCE(sp.date_of_birth, he.date_of_birth),
+         blood_group     = COALESCE(sp.blood_group, he.blood_group),
+         gender          = COALESCE(sp.gender, he.gender),
+         guardian_mobile = COALESCE(sp.guardian_mobile, he.guardian_mobile),
+         guardian_relation = COALESCE(sp.guardian_relation, he.guardian_relation),
+         email           = COALESCE(sp.email, he.email),
+         present_address = COALESCE(sp.present_address, he.present_address),
+         permanent_address = COALESCE(sp.permanent_address, he.permanent_address),
+         education_level = COALESCE(sp.education_level, he.education_level),
+         education_details = COALESCE(sp.education_details, he.education_details),
+         nid_number      = COALESCE(sp.nid_number, he.nid_number),
+         photo_url       = COALESCE(sp.photo_url, he.photo_url),
+         photo_public_id = COALESCE(sp.photo_public_id, he.photo_public_id)
+     FROM staff_profiles sp
+     WHERE sp.user_id = he.user_id
+       AND he.user_id IS NOT NULL
+     RETURNING he.id`,
+  );
+  return { synced: result.rows.length };
+}

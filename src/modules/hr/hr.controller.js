@@ -184,8 +184,15 @@ const createEssLogin = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const syncProfiles = async (req, res, next) => {
+  try {
+    const result = await hrService.syncAllProfilesFromStaffProfiles();
+    res.json({ success: true, data: result, message: `${result.synced} জন কর্মীর তথ্য sync হয়েছে` });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
-  getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
+  getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee, syncProfiles,
   uploadPhoto, uploadNid, uploadSignature,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition,
