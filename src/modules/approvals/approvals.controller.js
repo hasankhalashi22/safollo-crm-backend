@@ -1,4 +1,4 @@
-const syncService = require('../accounting/sync.service');
+const { syncPaymentToAccounting, syncReceivableOnApproval, removeSyncedTransaction } = require('../accounting/sync.service');
 const approvalsService = require('./approvals.service');
 const auditService = require('../audit/audit.service');
 const notificationsService = require('../notifications/notifications.service');
@@ -50,8 +50,10 @@ const approveSale = async (req, res, next) => {
     notificationsService.sendToUser(enrollment.executive_id, 'সেল Approve হয়েছে ✅', 'আপনার সেল approve করা হয়েছে');
 
     if (result.payment) {
-      syncService.syncPaymentToAccounting(result.payment, enrollment.id, req.user.id);
+      syncPaymentToAccounting(result.payment, enrollment.id, req.user.id);
     }
+    // Record Accounts Receivable for any due amount at approval time
+    syncReceivableOnApproval(enrollment, req.user.id);
 
     res.json({ success: true, data: enrollment, message: 'সেল Approve হয়েছে ✅' });
   } catch (err) { next(err); }
@@ -89,7 +91,7 @@ const approveDuePayment = async (req, res, next) => {
     });
     notificationsService.sendToUser(result.executive_id, 'বকেয়া Payment Approve হয়েছে ✅', 'আপনার বকেয়া payment approve করা হয়েছে');
 
-    syncService.syncPaymentToAccounting(result, result.enrollment_id, req.user.id);
+    syncPaymentToAccounting(result, result.enrollment_id, req.user.id);
 
     res.json({ success: true, data: result, message: 'Payment Approve হয়েছে ✅' });
   } catch (err) { next(err); }
@@ -104,7 +106,7 @@ const rejectDuePayment = async (req, res, next) => {
       description: `বকেয়া Payment Reject`, ipAddress: req.ip,
     });
     notificationsService.sendToUser(result.executive_id, 'বকেয়া Payment Reject হয়েছে ❌', `কারণ: ${req.body.reason || 'কারণ দেওয়া হয়নি'}`);
-    syncService.removeSyncedTransaction(req.params.id);
+    removeSyncedTransaction(req.params.id);
     res.json({ success: true, data: result, message: 'Payment Reject হয়েছে' });
   } catch (err) { next(err); }
 };

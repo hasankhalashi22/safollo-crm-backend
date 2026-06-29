@@ -14,7 +14,7 @@ const getAccountIdByName = async (name) => {
   return result.rows[0]?.id || null;
 };
 
-// Create accounting Cash In entry for an approved CRM payment
+// Create accounting entry for an approved CRM payment (enrollment or due payment)
 const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
   try {
     const assetAccountName = METHOD_TO_ACCOUNT[payment.payment_method] || 'Cash';
@@ -29,6 +29,7 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
     );
     const isBook = courseCheck.rows[0]?.is_book || false;
     const revenueAccountId = await getAccountIdByName(isBook ? 'Book Sales' : 'Course Sales');
+    const receivableAccountId = await getAccountIdByName('Accounts Receivable');
 
     if (!assetAccountId || !revenueAccountId) {
       console.error('Sync error: account not found for', assetAccountName);
@@ -39,40 +40,108 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
     const existing = await query('SELECT id FROM acc_transactions WHERE payment_id = $1', [payment.id]);
     if (existing.rows.length > 0) return;
 
+    const txnDate = payment.created_at ? payment.created_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+    if (payment.is_due_payment) {
+      // Due payment: Cash/bKash Dr, Accounts Receivable Cr
+      if (!receivableAccountId) {
+        console.error('Sync error: Accounts Receivable account not found');
+        return;
+      }
+      await withTransaction(async (client) => {
+        const txnResult = await client.query(
+          `INSERT INTO acc_transactions
+             (transaction_date, transaction_type, description, amount,
+              debit_account_id, credit_account_id, source, payment_id,
+              enrollment_id, created_by)
+           VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8)
+           RETURNING *`,
+          [txnDate, `বকেয়া পেমেন্ট সংগ্রহ`, payment.amount, assetAccountId, receivableAccountId, payment.id, enrollmentId, createdBy]
+        );
+        const txn = txnResult.rows[0];
+        await client.query(
+          `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'debit', $3, $4)`,
+          [txn.id, assetAccountId, payment.amount, txnDate]
+        );
+        await client.query(
+          `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, $4)`,
+          [txn.id, receivableAccountId, payment.amount, txnDate]
+        );
+      });
+    } else {
+      // New enrollment payment: Cash Dr, Revenue Cr
+      await withTransaction(async (client) => {
+        const txnResult = await client.query(
+          `INSERT INTO acc_transactions
+             (transaction_date, transaction_type, description, amount,
+              debit_account_id, credit_account_id, source, payment_id,
+              enrollment_id, created_by)
+           VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8)
+           RETURNING *`,
+          [txnDate, `নতুন এনরোলমেন্ট পেমেন্ট`, payment.amount, assetAccountId, revenueAccountId, payment.id, enrollmentId, createdBy]
+        );
+        const txn = txnResult.rows[0];
+        await client.query(
+          `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'debit', $3, $4)`,
+          [txn.id, assetAccountId, payment.amount, txnDate]
+        );
+        await client.query(
+          `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, $4)`,
+          [txn.id, revenueAccountId, payment.amount, txnDate]
+        );
+      });
+    }
+  } catch (err) {
+    console.error('syncPaymentToAccounting error:', err.message);
+  }
+};
+
+// Create Accounts Receivable entry when enrollment has due amount at approval time
+const syncReceivableOnApproval = async (enrollment, createdBy) => {
+  try {
+    const dueAmount = Number(enrollment.course_price) - Number(enrollment.total_collected);
+    if (dueAmount <= 0) return;
+
+    const courseCheck = await query(`SELECT is_book FROM courses WHERE id = $1`, [enrollment.course_id]);
+    const isBook = courseCheck.rows[0]?.is_book || false;
+    const revenueAccountId = await getAccountIdByName(isBook ? 'Book Sales' : 'Course Sales');
+    const receivableAccountId = await getAccountIdByName('Accounts Receivable');
+
+    if (!revenueAccountId || !receivableAccountId) {
+      console.error('Sync error: Revenue or Accounts Receivable account not found');
+      return;
+    }
+
+    // Check if receivable entry already exists for this enrollment
+    const existing = await query(
+      `SELECT id FROM acc_transactions WHERE enrollment_id = $1 AND description LIKE '%বাকি%'`,
+      [enrollment.id]
+    );
+    if (existing.rows.length > 0) return;
+
+    const txnDate = enrollment.approved_at ? enrollment.approved_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
     await withTransaction(async (client) => {
       const txnResult = await client.query(
         `INSERT INTO acc_transactions
            (transaction_date, transaction_type, description, amount,
-            debit_account_id, credit_account_id, source, payment_id,
-            enrollment_id, created_by)
-         VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8)
+            debit_account_id, credit_account_id, source, enrollment_id, created_by)
+         VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7)
          RETURNING *`,
-        [
-          payment.created_at ? payment.created_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          `CRM সেল — ${payment.is_due_payment ? 'বকেয়া পেমেন্ট' : 'নতুন এনরোলমেন্ট'}`,
-          payment.amount,
-          assetAccountId,
-          revenueAccountId,
-          payment.id,
-          enrollmentId,
-          createdBy
-        ]
+        [txnDate, `এনরোলমেন্ট বাকি — Accounts Receivable`, dueAmount, receivableAccountId, revenueAccountId, enrollment.id, createdBy]
       );
       const txn = txnResult.rows[0];
-
       await client.query(
-        `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date)
-         VALUES ($1, $2, 'debit', $3, $4)`,
-        [txn.id, assetAccountId, payment.amount, txn.transaction_date]
+        `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'debit', $3, $4)`,
+        [txn.id, receivableAccountId, dueAmount, txnDate]
       );
       await client.query(
-        `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date)
-         VALUES ($1, $2, 'credit', $3, $4)`,
-        [txn.id, revenueAccountId, payment.amount, txn.transaction_date]
+        `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, $4)`,
+        [txn.id, revenueAccountId, dueAmount, txnDate]
       );
     });
   } catch (err) {
-    console.error('syncPaymentToAccounting error:', err.message);
+    console.error('syncReceivableOnApproval error:', err.message);
   }
 };
 
@@ -102,4 +171,4 @@ const removeSyncedByEnrollment = async (enrollmentId) => {
   }
 };
 
-module.exports = { syncPaymentToAccounting, removeSyncedTransaction, removeSyncedByEnrollment };
+module.exports = { syncPaymentToAccounting, syncReceivableOnApproval, removeSyncedTransaction, removeSyncedByEnrollment };

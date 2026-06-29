@@ -726,6 +726,12 @@ await pool.query('ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_book BOOLEAN D
       console.log('✅ Book Sales account added');
     }
 
+    const arCheck = await pool.query("SELECT id FROM acc_accounts WHERE name = 'Accounts Receivable'");
+    if (arCheck.rows.length === 0) {
+      await pool.query(`INSERT INTO acc_accounts (code, name, account_type, account_subtype) VALUES ('1010', 'Accounts Receivable', 'asset', 'receivable') ON CONFLICT (code) DO NOTHING`);
+      console.log('✅ Accounts Receivable account added');
+    }
+
     // Seed default accounts (only if not exists)
     const accCheck = await pool.query("SELECT COUNT(*) FROM acc_accounts");
     if (parseInt(accCheck.rows[0].count) === 0) {
