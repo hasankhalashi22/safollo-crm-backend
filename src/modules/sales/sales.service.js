@@ -261,7 +261,7 @@ const getSaleById = async (enrollmentId, userId, roleLevel) => {
 };
 
 const getDueList = async ({ executiveId, roleLevel, page = 1, limit = 20 }) => {
-  const conditions = [`e.payment_status IN ('due', 'partial')`, `e.approval_status = 'approved'`];
+  const conditions = [`e.payment_status IN ('due', 'partial')`, `e.approval_status = 'approved'`, `(e.course_price - e.total_collected) > 0`];
   const params = [];
   let idx = 1;
 
