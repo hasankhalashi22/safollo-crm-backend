@@ -86,7 +86,8 @@ const getNotices = async (req, res, next) => {
 
 const createNotice = async (req, res, next) => {
   try {
-    const result = await hrService.createNotice(req.body, req.user.id);
+    const attachment_url = req.file ? req.file.path : (req.body.attachment_url || null);
+    const result = await hrService.createNotice({ ...req.body, attachment_url }, req.user.id);
     res.status(201).json({ success: true, data: result, message: 'Notice posted' });
   } catch (err) { next(err); }
 };

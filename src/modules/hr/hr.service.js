@@ -255,17 +255,17 @@ const getNotices = async () => {
     `SELECT n.*, sp.full_name as created_by_name
      FROM hr_notices n
      LEFT JOIN staff_profiles sp ON sp.user_id = n.created_by
-     ORDER BY n.created_at DESC`
+     ORDER BY CASE n.category WHEN 'urgent' THEN 0 ELSE 1 END, n.created_at DESC`
   );
   return result.rows;
 };
 
 const createNotice = async (data, userId) => {
-  const { title, content, attachment_url } = data;
+  const { title, content, attachment_url, category } = data;
   const result = await query(
-    `INSERT INTO hr_notices (title, content, attachment_url, created_by)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [title, content, attachment_url || null, userId]
+    `INSERT INTO hr_notices (title, content, attachment_url, category, created_by)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [title, content, attachment_url || null, category || 'general', userId]
   );
   return result.rows[0];
 };

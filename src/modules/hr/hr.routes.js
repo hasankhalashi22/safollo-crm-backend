@@ -2,9 +2,13 @@ const express = require('express');
 const router = express.Router();
 const hrController = require('./hr.controller');
 const { authenticate, authorizeModule } = require('../../middleware/authenticate');
-const { uploadProfile, uploadNid, uploadSignature } = require('../../config/cloudinary');
+const { uploadProfile, uploadNid, uploadSignature, uploadNotice } = require('../../config/cloudinary');
 
 router.use(authenticate);
+
+// Notice board read — open to everyone logged in (ESS included), not gated by HR module access
+router.get('/notices', hrController.getNotices);
+
 router.use(authorizeModule('hr'));
 
 router.get('/employees', hrController.getEmployees);
@@ -34,8 +38,7 @@ router.get('/holidays', hrController.getHolidays);
 router.post('/holidays', hrController.createHoliday);
 router.delete('/holidays/:id', hrController.deleteHoliday);
 
-router.get('/notices', hrController.getNotices);
-router.post('/notices', hrController.createNotice);
+router.post('/notices', uploadNotice.single('attachment'), hrController.createNotice);
 router.delete('/notices/:id', hrController.deleteNotice);
 
 

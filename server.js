@@ -692,10 +692,12 @@ await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS durati
         title VARCHAR(200) NOT NULL,
         content TEXT NOT NULL,
         attachment_url TEXT,
+        category VARCHAR(20) NOT NULL DEFAULT 'general',
         created_by UUID REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await pool.query(`ALTER TABLE hr_notices ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT 'general'`);
     console.log('✅ HR module schema ready');
 
 await pool.query(`

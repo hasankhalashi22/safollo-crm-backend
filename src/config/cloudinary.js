@@ -46,10 +46,21 @@ const signatureStorage = new CloudinaryStorage({
   },
 });
 
+// Storage for HR notice attachments
+const noticeStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'safollo-crm/notices',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+    resource_type: 'auto',
+  },
+});
+
 const uploadProfile   = multer({ storage: profileStorage });
 const uploadNid       = multer({ storage: nidStorage });
 const uploadPayment   = multer({ storage: paymentStorage });
 const uploadSignature = multer({ storage: signatureStorage });
+const uploadNotice    = multer({ storage: noticeStorage });
 
 // Delete from cloudinary
 const deleteFile = async (publicId) => {
@@ -67,5 +78,6 @@ module.exports = {
   uploadNid,
   uploadPayment,
   uploadSignature,
+  uploadNotice,
   deleteFile,
 };
