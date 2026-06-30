@@ -56,4 +56,19 @@ const sendToUser = async (userId, title, body, data = {}) => {
   await sendNotification(userId, title, body, data);
 };
 
-module.exports = { saveSubscription, sendToApprovers, sendToUser };
+const sendToAll = async (title, body, data = {}) => {
+  try {
+    const result = await query(
+      `SELECT ps.user_id FROM push_subscriptions ps
+       JOIN users u ON u.id = ps.user_id
+       WHERE u.is_active = TRUE`
+    );
+    for (const row of result.rows) {
+      await sendNotification(row.user_id, title, body, data);
+    }
+  } catch (err) {
+    console.error('Send to all error:', err.message);
+  }
+};
+
+module.exports = { saveSubscription, sendToApprovers, sendToUser, sendToAll };

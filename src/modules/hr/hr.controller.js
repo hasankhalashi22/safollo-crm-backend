@@ -1,4 +1,5 @@
 const hrService = require('./hr.service');
+const notificationsService = require('../notifications/notifications.service');
 
 const getEmployees = async (req, res, next) => {
   try {
@@ -88,6 +89,8 @@ const createNotice = async (req, res, next) => {
   try {
     const attachment_url = req.file ? req.file.path : (req.body.attachment_url || null);
     const result = await hrService.createNotice({ ...req.body, attachment_url }, req.user.id);
+    const prefix = result.category === 'urgent' ? '🔴 জরুরি নোটিশ' : '📋 নতুন নোটিশ';
+    notificationsService.sendToAll(prefix, result.title);
     res.status(201).json({ success: true, data: result, message: 'Notice posted' });
   } catch (err) { next(err); }
 };
