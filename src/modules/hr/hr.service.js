@@ -113,18 +113,27 @@ const createEmployee = async (data, createdBy) => {
     );
     finalUserId = newUser.id;
   }
+  // Generate unique employee_id: YY## (e.g. 2501, 2502...)
+  const yy = String(new Date().getFullYear()).slice(-2);
+  const countRes = await query(
+    `SELECT COUNT(*) FROM hr_employees WHERE employee_id LIKE $1`,
+    [`${yy}%`]
+  );
+  const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(2, '0');
+  const employeeId = `${yy}${seq}`;
+
   const result = await query(
     `INSERT INTO hr_employees
        (full_name, phone, email, user_id, position_id, designation, department,
         reports_to, employment_type, office_start_time, office_end_time, is_remote,
-        weekly_off_day, basic_salary, status, joining_date)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        weekly_off_day, basic_salary, status, joining_date, employee_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
      RETURNING *`,
     [full_name, phone || null, email || null, finalUserId, position_id || null,
      designation || null, department || null, reports_to || null,
      employment_type || 'full_time', office_start_time || '11:00', office_end_time || '21:00',
      is_remote || false, weekly_off_day || null, basic_salary || null,
-     status || 'active', joining_date || null]
+     status || 'active', joining_date || null, employeeId]
   );
   return result.rows[0];
 };
