@@ -178,9 +178,10 @@ const numericFields = ['basic_salary'];
   if (result.rows.length === 0) throw { statusCode: 404, message: 'কর্মী পাওয়া যায়নি' };
   const updated = result.rows[0];
 
-  // যদি resigned/terminated হয় তাহলে linked user account inactive করো
+  // যদি resigned/terminated হয় তাহলে linked user account inactive করো এবং সব session মুছো
   if (['resigned', 'terminated'].includes(data.status) && updated.user_id) {
     await query(`UPDATE users SET is_active = false WHERE id = $1`, [updated.user_id]);
+    await query(`DELETE FROM sessions WHERE user_id = $1`, [updated.user_id]);
   }
   // যদি আবার active/on_leave করা হয় তাহলে user account active করো
   if (['active', 'on_leave'].includes(data.status) && updated.user_id) {
