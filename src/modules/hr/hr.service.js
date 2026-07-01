@@ -23,6 +23,7 @@ const getEmployees = async () => {
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
      WHERE r.name IS DISTINCT FROM 'super_admin'
+       AND he.status IN ('active', 'on_leave')
      ORDER BY position_tier ASC, he.full_name ASC`
   );
 
