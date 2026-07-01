@@ -698,6 +698,9 @@ await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS durati
       )
     `);
     await pool.query(`ALTER TABLE hr_notices ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT 'general'`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS resignation_date DATE`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS termination_date DATE`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS exit_reason TEXT`);
     console.log('✅ HR module schema ready');
 
 await pool.query(`

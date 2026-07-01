@@ -137,10 +137,11 @@ const updateEmployee = async (id, data) => {
     'guardian_mobile', 'guardian_relation', 'present_address', 'permanent_address',
     'education_level', 'education_details', 'nid_number', 'is_locked',
     'nid_image_url', 'nid_image_public_id', 'photo_url', 'photo_public_id',
-    'signature_url', 'signature_public_id'
+    'signature_url', 'signature_public_id',
+    'resignation_date', 'termination_date', 'exit_reason',
   ];
 const numericFields = ['basic_salary'];
-  const dateFields = ['joining_date', 'date_of_birth'];
+  const dateFields = ['joining_date', 'date_of_birth', 'resignation_date', 'termination_date'];
   const booleanFields = ['is_remote', 'is_locked'];
   const uuidFields = ['position_id', 'reports_to'];
 
@@ -178,7 +179,22 @@ const numericFields = ['basic_salary'];
 };
 
 const deleteEmployee = async (id) => {
-  await query('UPDATE hr_employees SET status = $1 WHERE id = $2', ['terminated', id]);
+  await query('DELETE FROM hr_employees WHERE id = $1', [id]);
+};
+
+const getEmployeeHistory = async () => {
+  const result = await query(
+    `SELECT he.*, u.email, u.username, r.name as role_name,
+            hp.title as position_title, hd.name as department_name
+     FROM hr_employees he
+     LEFT JOIN users u ON u.id = he.user_id
+     LEFT JOIN roles r ON r.id = u.role_id
+     LEFT JOIN hr_positions hp ON hp.id = he.position_id
+     LEFT JOIN hr_departments hd ON hd.id = he.department_id
+     WHERE he.status IN ('resigned', 'terminated')
+     ORDER BY COALESCE(he.termination_date, he.resignation_date, he.updated_at) DESC`
+  );
+  return result.rows;
 };
 
 // ===== Organogram (Positions) =====
@@ -413,7 +429,7 @@ const getDashboardStats = async () => {
 };
 
 module.exports = {
-  getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
+  getEmployees, getEmployeeById, getEmployeeHistory, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition, getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
   getDashboardStats,

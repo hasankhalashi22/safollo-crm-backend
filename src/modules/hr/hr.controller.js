@@ -39,7 +39,14 @@ const updateEmployee = async (req, res, next) => {
 const deleteEmployee = async (req, res, next) => {
   try {
     await hrService.deleteEmployee(req.params.id);
-    res.json({ success: true, message: 'কর্মী নিষ্ক্রিয় করা হয়েছে' });
+    res.json({ success: true, message: 'কর্মী মুছে ফেলা হয়েছে' });
+  } catch (err) { next(err); }
+};
+
+const getEmployeeHistory = async (req, res, next) => {
+  try {
+    const result = await hrService.getEmployeeHistory();
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 };
 
@@ -203,7 +210,7 @@ const syncProfiles = async (req, res, next) => {
 };
 
 module.exports = {
-  getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee, syncProfiles,
+  getEmployees, getEmployeeById, getEmployeeHistory, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee, syncProfiles,
   uploadPhoto, uploadNid, uploadSignature,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition,

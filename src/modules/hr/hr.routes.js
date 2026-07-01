@@ -13,6 +13,7 @@ router.get('/dashboard-stats', hrController.getDashboardStats);
 router.use(authorizeModule('hr'));
 
 router.get('/employees', hrController.getEmployees);
+router.get('/employees/history', hrController.getEmployeeHistory);
 router.get('/employees/unlinked-crm-users', hrController.getUnlinkedCrmUsers);
 router.get('/employees/:id', hrController.getEmployeeById);
 router.post('/employees', hrController.createEmployee);
