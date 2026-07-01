@@ -380,10 +380,43 @@ const createEssLogin = async (employeeId, createdBy) => {
   return { user_id: newUser.id, phone: emp.phone };
 };
 
+const getDashboardStats = async () => {
+  const today = new Date().toISOString().split('T')[0];
+  const year = new Date().getFullYear();
+
+  const [empCount, todayAtt, onLeave, pendingLeave, holidays, notices] = await Promise.all([
+    query(`SELECT COUNT(*) FROM hr_employees WHERE status = 'active'`),
+    query(`SELECT COUNT(*) FROM hr_attendance WHERE date = $1`, [today]),
+    query(`SELECT COUNT(*) FROM hr_leave_applications WHERE status = 'approved' AND start_date <= $1 AND end_date >= $1`, [today]),
+    query(`SELECT COUNT(*) FROM hr_leave_applications WHERE status = 'pending'`),
+    query(`SELECT id, name, date FROM hr_holidays WHERE EXTRACT(YEAR FROM date) = $1 AND date >= $2 ORDER BY date ASC LIMIT 4`, [year, today]),
+    query(`SELECT id, title, content, category, created_at, attachment_url FROM hr_notices ORDER BY created_at DESC LIMIT 3`),
+  ]);
+
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStartStr = weekStart.toISOString().split('T')[0];
+  const weekAtt = await query(
+    `SELECT date, COUNT(*) as count FROM hr_attendance WHERE date >= $1 AND date <= $2 GROUP BY date`,
+    [weekStartStr, today]
+  );
+
+  return {
+    total_employees: parseInt(empCount.rows[0].count),
+    today_present: parseInt(todayAtt.rows[0].count),
+    on_leave_today: parseInt(onLeave.rows[0].count),
+    pending_leave: parseInt(pendingLeave.rows[0].count),
+    week_attendance: weekAtt.rows,
+    upcoming_holidays: holidays.rows,
+    recent_notices: notices.rows,
+  };
+};
+
 module.exports = {
   getEmployees, getEmployeeById, getUnlinkedCrmUsers, createEmployee, updateEmployee, deleteEmployee,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition, getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
+  getDashboardStats,
   linkEssUser, unlinkEssUser, createEssLogin, syncAllProfilesFromStaffProfiles,
 };
 

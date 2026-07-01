@@ -78,6 +78,13 @@ const getOrganogram = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getDashboardStats = async (req, res, next) => {
+  try {
+    const result = await hrService.getDashboardStats();
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
 const getNotices = async (req, res, next) => {
   try {
     const result = await hrService.getNotices();
@@ -200,6 +207,7 @@ module.exports = {
   uploadPhoto, uploadNid, uploadSignature,
   getEmployeeModuleAccess, setEmployeeModuleAccess,
   getPositions, createPosition, updatePosition, deletePosition,
+  getDashboardStats,
   getOrganogram, getHolidays, createHoliday, deleteHoliday, getNotices, createNotice, deleteNotice,
   linkEssUser, unlinkEssUser, createEssLogin,
 };

@@ -8,6 +8,7 @@ router.use(authenticate);
 
 // Notice board read — open to everyone logged in (ESS included), not gated by HR module access
 router.get('/notices', hrController.getNotices);
+router.get('/dashboard-stats', hrController.getDashboardStats);
 
 router.use(authorizeModule('hr'));
 
