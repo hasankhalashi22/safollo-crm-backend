@@ -389,7 +389,7 @@ const getDashboardStats = async () => {
     query(`SELECT COUNT(*) FROM hr_attendance WHERE date = $1`, [today]),
     query(`SELECT COUNT(*) FROM hr_leave_applications WHERE status = 'approved' AND start_date <= $1 AND end_date >= $1`, [today]),
     query(`SELECT COUNT(*) FROM hr_leave_applications WHERE status = 'pending'`),
-    query(`SELECT id, name, date FROM hr_holidays WHERE EXTRACT(YEAR FROM date) = $1 AND date >= $2 ORDER BY date ASC LIMIT 4`, [year, today]),
+    query(`SELECT id, name, date FROM hr_office_holidays WHERE EXTRACT(YEAR FROM date) = $1 AND date >= $2 ORDER BY date ASC LIMIT 4`, [year, today]),
     query(`SELECT id, title, content, category, created_at, attachment_url FROM hr_notices ORDER BY created_at DESC LIMIT 3`),
   ]);
 
