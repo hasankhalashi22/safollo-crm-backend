@@ -152,7 +152,7 @@ const hasPermission = (permission) => {
 };
 
 // Module-based authorization: super_admin always passes; otherwise check hr_employee_module_access
-const authorizeModule = (moduleKey, minRoles = ['viewer', 'editor', 'admin', 'hr_manager']) => {
+const authorizeModule = (moduleKey, minRoles = ['viewer', 'editor', 'admin', 'hr_manager', 'hr_advisor']) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'অননুমোদিত' });

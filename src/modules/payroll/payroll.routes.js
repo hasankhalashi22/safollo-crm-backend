@@ -11,7 +11,7 @@ router.post('/employees/:employeeId/components', payrollController.addComponent)
 router.delete('/components/:id', payrollController.removeComponent);
 
 router.get('/settings', payrollController.getSettings);
-router.patch('/settings', payrollController.updateSettings);
+router.patch('/settings', authorizeModule('hr', ['hr_advisor']), payrollController.updateSettings);
 
 router.post('/prepare', payrollController.prepareMonth);
 router.patch('/runs/:id', payrollController.updateDraftRun);

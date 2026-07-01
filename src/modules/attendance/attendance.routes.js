@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const attendanceController = require('./attendance.controller');
-const { authenticate } = require('../../middleware/authenticate');
+const { authenticate, authorizeModule } = require('../../middleware/authenticate');
 
 router.use(authenticate);
 
 router.get('/policy', attendanceController.getPolicy);
-router.patch('/policy', attendanceController.updatePolicy);
+router.patch('/policy', authorizeModule('hr', ['hr_advisor']), attendanceController.updatePolicy);
 router.get('/break-types', attendanceController.getBreakTypes);
-router.patch('/break-types/:id', attendanceController.updateBreakType);
+router.patch('/break-types/:id', authorizeModule('hr', ['hr_advisor']), attendanceController.updateBreakType);
 
 router.post('/check-in', attendanceController.checkIn);
 router.post('/break-out', attendanceController.breakOut);

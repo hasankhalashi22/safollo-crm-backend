@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const leaveController = require('./leave.controller');
-const { authenticate } = require('../../middleware/authenticate');
+const { authenticate, authorizeModule } = require('../../middleware/authenticate');
 
 router.use(authenticate);
 
@@ -12,7 +12,7 @@ router.patch('/types/:id', leaveController.updateLeaveType);
 
 // Leave policy (HR admin)
 router.get('/policy', leaveController.getLeavePolicy);
-router.patch('/policy', leaveController.updateLeavePolicy);
+router.patch('/policy', authorizeModule('hr', ['hr_advisor']), leaveController.updateLeavePolicy);
 
 // Employee self-service (my own)
 router.get('/my/balances', leaveController.getMyBalances);
