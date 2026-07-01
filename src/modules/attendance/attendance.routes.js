@@ -6,9 +6,9 @@ const { authenticate, authorizeModule } = require('../../middleware/authenticate
 router.use(authenticate);
 
 router.get('/policy', attendanceController.getPolicy);
-router.patch('/policy', authorizeModule('hr', ['hr_advisor']), attendanceController.updatePolicy);
+router.patch('/policy', authorizeModule('hr', ['hr_advisor', 'admin']), attendanceController.updatePolicy);
 router.get('/break-types', attendanceController.getBreakTypes);
-router.patch('/break-types/:id', authorizeModule('hr', ['hr_advisor']), attendanceController.updateBreakType);
+router.patch('/break-types/:id', authorizeModule('hr', ['hr_advisor', 'admin']), attendanceController.updateBreakType);
 
 router.post('/check-in', attendanceController.checkIn);
 router.post('/break-out', attendanceController.breakOut);

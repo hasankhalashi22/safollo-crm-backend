@@ -12,7 +12,7 @@ router.patch('/types/:id', leaveController.updateLeaveType);
 
 // Leave policy (HR admin)
 router.get('/policy', leaveController.getLeavePolicy);
-router.patch('/policy', authorizeModule('hr', ['hr_advisor']), leaveController.updateLeavePolicy);
+router.patch('/policy', authorizeModule('hr', ['hr_advisor', 'admin']), leaveController.updateLeavePolicy);
 
 // Employee self-service (my own)
 router.get('/my/balances', leaveController.getMyBalances);

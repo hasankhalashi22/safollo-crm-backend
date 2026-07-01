@@ -158,7 +158,7 @@ const authorizeModule = (moduleKey, minRoles = ['viewer', 'editor', 'admin', 'hr
       return res.status(401).json({ success: false, message: 'অননুমোদিত' });
     }
 
-    if (req.user.role === 'super_admin') return next();
+    if (req.user.role === 'super_admin' || req.user.role === 'advisor') return next();
 
     const access = (req.user.module_access || []).find(a => a.module_key === moduleKey);
     if (!access || !minRoles.includes(access.role_key)) {
