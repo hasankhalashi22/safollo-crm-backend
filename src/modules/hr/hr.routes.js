@@ -22,7 +22,7 @@ router.patch('/employees/:id', authorizeModule('hr', ['hr_manager', 'hr_advisor'
 router.delete('/employees/:id', hrController.deleteEmployee); // super_admin only — handled in controller
 router.get('/employees/:id/module-access', hrController.getEmployeeModuleAccess);
 router.put('/employees/:id/module-access', authorizeModule('hr', ['hr_advisor']), hrController.setEmployeeModuleAccess);
-router.post('/sync-profiles', authorizeModule('hr', ['hr_advisor']), hrController.syncProfiles);
+router.post('/sync-profiles', hrController.syncProfiles);
 router.post('/employees/:id/link-ess', authorizeModule('hr', ['hr_manager', 'hr_advisor']), hrController.linkEssUser);
 router.delete('/employees/:id/link-ess', authorizeModule('hr', ['hr_manager', 'hr_advisor']), hrController.unlinkEssUser);
 router.post('/employees/:id/create-ess-login', authorizeModule('hr', ['hr_manager', 'hr_advisor']), hrController.createEssLogin);
