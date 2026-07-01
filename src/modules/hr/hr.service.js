@@ -185,13 +185,14 @@ const deleteEmployee = async (id) => {
 
 const getEmployeeHistory = async () => {
   const result = await query(
-    `SELECT he.*, u.email, u.username, r.name as role_name,
-            hp.title as position_title, hd.name as department_name
+    `SELECT he.*, hp.title as position_title,
+            mgr.full_name as reports_to_name,
+            u.phone as crm_phone, r.label as crm_role_label
      FROM hr_employees he
+     LEFT JOIN hr_positions hp ON hp.id = he.position_id
+     LEFT JOIN hr_employees mgr ON mgr.id = he.reports_to
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
-     LEFT JOIN hr_positions hp ON hp.id = he.position_id
-     LEFT JOIN hr_departments hd ON hd.id = he.department_id
      WHERE he.status IN ('resigned', 'terminated')
      ORDER BY COALESCE(he.termination_date, he.resignation_date, he.updated_at) DESC`
   );
