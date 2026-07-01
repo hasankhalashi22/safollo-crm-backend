@@ -194,7 +194,7 @@ const getEmployeeHistory = async () => {
      LEFT JOIN users u ON u.id = he.user_id
      LEFT JOIN roles r ON r.id = u.role_id
      WHERE he.status IN ('resigned', 'terminated')
-     ORDER BY COALESCE(he.termination_date, he.resignation_date, he.updated_at) DESC`
+     ORDER BY he.updated_at DESC`
   );
   return result.rows;
 };
