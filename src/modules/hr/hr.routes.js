@@ -38,8 +38,8 @@ router.delete('/positions/:id', hrController.deletePosition);
 
 router.get('/organogram', hrController.getOrganogram);
 router.get('/holidays', hrController.getHolidays);
-router.post('/holidays', hrController.createHoliday);
-router.delete('/holidays/:id', hrController.deleteHoliday);
+router.post('/holidays', authorizeModule('hr', ['hr_advisor', 'admin']), hrController.createHoliday);
+router.delete('/holidays/:id', authorizeModule('hr', ['hr_advisor', 'admin']), hrController.deleteHoliday);
 
 router.post('/notices', uploadNotice.single('attachment'), hrController.createNotice);
 router.delete('/notices/:id', hrController.deleteNotice);
