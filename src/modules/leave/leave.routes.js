@@ -9,6 +9,7 @@ router.use(authenticate);
 router.get('/types', leaveController.getLeaveTypes);
 router.post('/types', authorizeModule('hr', ['hr_advisor', 'admin']), leaveController.createLeaveType);
 router.patch('/types/:id', authorizeModule('hr', ['hr_advisor', 'admin']), leaveController.updateLeaveType);
+router.delete('/types/:id', authorizeModule('hr', ['hr_advisor', 'admin']), leaveController.deleteLeaveType);
 
 // Leave policy (HR admin)
 router.get('/policy', leaveController.getLeavePolicy);

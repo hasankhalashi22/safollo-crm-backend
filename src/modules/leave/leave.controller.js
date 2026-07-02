@@ -21,6 +21,13 @@ const updateLeaveType = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const deleteLeaveType = async (req, res, next) => {
+  try {
+    await leaveService.deleteLeaveType(req.params.id);
+    res.json({ success: true, message: 'মুছে ফেলা হয়েছে' });
+  } catch (err) { next(err); }
+};
+
 const getLeavePolicy = async (req, res, next) => {
   try {
     const result = await leaveService.getLeavePolicy();
@@ -121,7 +128,7 @@ const checkIsApprover = async (req, res, next) => {
 };
 
 module.exports = {
-  getLeaveTypes, createLeaveType, updateLeaveType,
+  getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType,
   getLeavePolicy, updateLeavePolicy,
   getMyBalances, getEmployeeBalances, getLeaveRegister, getEmployeeApplications, getMyApprovalQueue, checkIsApprover,
   applyLeave, getMyApplications, getAllApplications,

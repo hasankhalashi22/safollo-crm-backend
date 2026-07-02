@@ -16,6 +16,10 @@ const createLeaveType = async (data) => {
   return result.rows[0];
 };
 
+const deleteLeaveType = async (id) => {
+  await query('DELETE FROM hr_leave_types WHERE id = $1', [id]);
+};
+
 const updateLeaveType = async (id, data) => {
   const { name, name_bn, annual_quota_days, is_paid, applicable_to, is_active, eligibility_months } = data;
   const result = await query(
@@ -442,7 +446,7 @@ const isApprover = async (userId) => {
 
 
 module.exports = {
-  getLeaveTypes, createLeaveType, updateLeaveType,
+  getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType,
   getLeavePolicy, updateLeavePolicy,
   getEmployeeBalances, getLeaveRegister, getMyApprovalQueue, isApprover,
   applyLeave, getApplications, processApplication,
