@@ -25,6 +25,7 @@ router.get('/my/is-approver', leaveController.checkIsApprover);
 // HR admin — all applications
 router.get('/applications', leaveController.getAllApplications);
 router.get('/employees/:employeeId/balances', leaveController.getEmployeeBalances);
+router.get('/employees/:employeeId/residential-credits', leaveController.getResidentialLeaveCredits);
 router.get('/employees/:employeeId/applications', leaveController.getEmployeeApplications);
 router.get('/register', leaveController.getLeaveRegister);
 

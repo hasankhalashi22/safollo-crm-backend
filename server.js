@@ -702,6 +702,18 @@ await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS durati
     await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS termination_date DATE`);
     await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS exit_reason TEXT`);
     await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS employee_id VARCHAR(10) UNIQUE`);
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS monthly_residential_leave INTEGER DEFAULT 0`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_residential_leave_credits (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER REFERENCES hr_employees(id) ON DELETE CASCADE,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        allocated_days INTEGER NOT NULL,
+        used_days INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(employee_id, year, month)
+      )
+    `);
     console.log('✅ HR module schema ready');
 
 await pool.query(`

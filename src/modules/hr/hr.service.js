@@ -78,7 +78,7 @@ const createEmployee = async (data, createdBy) => {
   const {
     full_name, phone, email, user_id, position_id, designation, department,
     reports_to, employment_type, office_start_time, office_end_time, is_remote,
-    weekly_off_day, basic_salary, status, joining_date,
+    weekly_off_day, basic_salary, status, joining_date, monthly_residential_leave,
     grant_crm_access, crm_role_id, crm_manager_id, grant_basic_login
   } = data;
 
@@ -126,14 +126,15 @@ const createEmployee = async (data, createdBy) => {
     `INSERT INTO hr_employees
        (full_name, phone, email, user_id, position_id, designation, department,
         reports_to, employment_type, office_start_time, office_end_time, is_remote,
-        weekly_off_day, basic_salary, status, joining_date, employee_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        weekly_off_day, basic_salary, status, joining_date, employee_id, monthly_residential_leave)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      RETURNING *`,
     [full_name, phone || null, email || null, finalUserId, position_id || null,
      designation || null, department || null, reports_to || null,
      employment_type || 'full_time', office_start_time || '11:00', office_end_time || '21:00',
      is_remote || false, weekly_off_day || null, basic_salary || null,
-     status || 'active', joining_date || null, employeeId]
+     status || 'active', joining_date || null, employeeId,
+     (employment_type === 'residential' && monthly_residential_leave) ? parseInt(monthly_residential_leave) : 0]
   );
   return result.rows[0];
 };
@@ -148,7 +149,7 @@ const updateEmployee = async (id, data) => {
     'education_level', 'education_details', 'nid_number', 'is_locked',
     'nid_image_url', 'nid_image_public_id', 'photo_url', 'photo_public_id',
     'signature_url', 'signature_public_id',
-    'resignation_date', 'termination_date', 'exit_reason',
+    'resignation_date', 'termination_date', 'exit_reason', 'monthly_residential_leave',
   ];
 const numericFields = ['basic_salary'];
   const dateFields = ['joining_date', 'date_of_birth', 'resignation_date', 'termination_date'];

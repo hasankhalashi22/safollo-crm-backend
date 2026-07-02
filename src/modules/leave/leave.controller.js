@@ -60,6 +60,13 @@ const getEmployeeBalances = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getResidentialLeaveCredits = async (req, res, next) => {
+  try {
+    const result = await leaveService.getResidentialLeaveCredits(req.params.employeeId, req.query.year || new Date().getFullYear());
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
 const getEmployeeApplications = async (req, res, next) => {
   try {
     const result = await leaveService.getApplications({ employeeId: req.params.employeeId, year: req.query.year });
@@ -130,7 +137,7 @@ const checkIsApprover = async (req, res, next) => {
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getMyBalances, getEmployeeBalances, getLeaveRegister, getEmployeeApplications, getMyApprovalQueue, checkIsApprover,
+  getMyBalances, getEmployeeBalances, getResidentialLeaveCredits, getLeaveRegister, getEmployeeApplications, getMyApprovalQueue, checkIsApprover,
   applyLeave, getMyApplications, getAllApplications,
   processApplication,
 };

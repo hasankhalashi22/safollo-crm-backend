@@ -81,10 +81,53 @@ const isEligible = (joiningDate, eligibilityMonths) => {
   return months >= eligibilityMonths;
 };
 
+// Auto-credit monthly residential leave for each month up to current month
+const ensureResidentialCredits = async (employeeId, year) => {
+  const empResult = await query(
+    'SELECT monthly_residential_leave FROM hr_employees WHERE id = $1', [employeeId]
+  );
+  const daysPerMonth = empResult.rows[0]?.monthly_residential_leave || 0;
+  if (!daysPerMonth) return;
+
+  // Check if there is an active residential leave type
+  const typeRes = await query(
+    `SELECT id FROM hr_leave_types WHERE is_active = TRUE AND applicable_to = 'residential' LIMIT 1`
+  );
+  if (typeRes.rows.length === 0) return; // leave type must exist and be active
+
+  const now = new Date();
+  const currentMonth = year === now.getFullYear() ? now.getMonth() + 1 : 12;
+  for (let m = 1; m <= currentMonth; m++) {
+    await query(
+      `INSERT INTO hr_residential_leave_credits (employee_id, year, month, allocated_days, used_days)
+       VALUES ($1, $2, $3, $4, 0)
+       ON CONFLICT (employee_id, year, month) DO NOTHING`,
+      [employeeId, year, m, daysPerMonth]
+    );
+  }
+};
+
+const getResidentialLeaveCredits = async (employeeId, year) => {
+  await ensureResidentialCredits(employeeId, year);
+  const result = await query(
+    `SELECT *, (allocated_days - used_days) AS remaining_days
+     FROM hr_residential_leave_credits
+     WHERE employee_id = $1 AND year = $2
+     ORDER BY month ASC`,
+    [employeeId, year]
+  );
+  return result.rows;
+};
+
 const getEmployeeBalances = async (employeeId, year) => {
   const currentYear = year || new Date().getFullYear();
   const empResult = await query('SELECT employment_type, joining_date FROM hr_employees WHERE id = $1', [employeeId]);
   const emp = empResult.rows[0];
+
+  // Auto-credit residential monthly leave if applicable
+  if (emp?.employment_type === 'residential') {
+    await ensureResidentialCredits(employeeId, currentYear);
+  }
 
   if (emp?.employment_type === 'full_time') {
     const types = await query(`SELECT * FROM hr_leave_types WHERE is_active = TRUE AND applicable_to = 'full_time'`);
@@ -168,7 +211,19 @@ const applyLeave = async (employeeId, data) => {
   const leaveType = await query('SELECT * FROM hr_leave_types WHERE id = $1', [leave_type_id]);
   const lt = leaveType.rows[0];
 
-  if (lt?.is_paid && emp?.employment_type === 'full_time') {
+  if (lt?.applicable_to === 'residential' && emp?.employment_type === 'residential') {
+    // Check monthly residential credit
+    const leaveMonth = new Date(start_date).getMonth() + 1;
+    const leaveYear = new Date(start_date).getFullYear();
+    const credit = await query(
+      `SELECT allocated_days - used_days AS remaining FROM hr_residential_leave_credits
+       WHERE employee_id = $1 AND year = $2 AND month = $3`,
+      [employeeId, leaveYear, leaveMonth]
+    );
+    if (credit.rows.length === 0 || credit.rows[0].remaining < duration_days) {
+      throw { statusCode: 400, message: `এই মাসে পর্যাপ্ত আবাসিক ছুটি নেই` };
+    }
+  } else if (lt?.is_paid && emp?.employment_type === 'full_time') {
     const year = new Date(start_date).getFullYear();
     const balance = await query(
       `SELECT total_days - used_days as remaining FROM hr_leave_balances
@@ -325,12 +380,23 @@ const processApplication = async (applicationId, action, actorEmployeeId, data =
     if (newStatus === 'approved') {
       const finalDays = updateFields.modified_duration_days || app.duration_days;
       const year = new Date(app.start_date).getFullYear();
-      await query(
-        `UPDATE hr_leave_balances
-         SET used_days = used_days + $1
-         WHERE employee_id = $2 AND leave_type_id = $3 AND year = $4`,
-        [finalDays, app.employee_id, app.leave_type_id, year]
-      );
+      const month = new Date(app.start_date).getMonth() + 1;
+      // Check if this is a residential leave type
+      const ltCheck = await query('SELECT applicable_to FROM hr_leave_types WHERE id = $1', [app.leave_type_id]);
+      if (ltCheck.rows[0]?.applicable_to === 'residential') {
+        await query(
+          `UPDATE hr_residential_leave_credits SET used_days = used_days + $1
+           WHERE employee_id = $2 AND year = $3 AND month = $4`,
+          [finalDays, app.employee_id, year, month]
+        );
+      } else {
+        await query(
+          `UPDATE hr_leave_balances
+           SET used_days = used_days + $1
+           WHERE employee_id = $2 AND leave_type_id = $3 AND year = $4`,
+          [finalDays, app.employee_id, app.leave_type_id, year]
+        );
+      }
       // Update employee status to 'on_leave'
       await query(
         `UPDATE hr_employees SET status = 'on_leave' WHERE id = $1`,
@@ -448,6 +514,6 @@ const isApprover = async (userId) => {
 module.exports = {
   getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType,
   getLeavePolicy, updateLeavePolicy,
-  getEmployeeBalances, getLeaveRegister, getMyApprovalQueue, isApprover,
+  getEmployeeBalances, getResidentialLeaveCredits, getLeaveRegister, getMyApprovalQueue, isApprover,
   applyLeave, getApplications, processApplication,
 };
