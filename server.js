@@ -706,7 +706,7 @@ await pool.query(`ALTER TABLE hr_office_holidays ADD COLUMN IF NOT EXISTS durati
     await pool.query(`
       CREATE TABLE IF NOT EXISTS hr_residential_leave_credits (
         id SERIAL PRIMARY KEY,
-        employee_id INTEGER REFERENCES hr_employees(id) ON DELETE CASCADE,
+        employee_id UUID REFERENCES hr_employees(id) ON DELETE CASCADE,
         year INTEGER NOT NULL,
         month INTEGER NOT NULL,
         allocated_days INTEGER NOT NULL,
