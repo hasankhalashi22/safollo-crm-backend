@@ -235,7 +235,8 @@ const getSaleById = async (enrollmentId, userId, roleLevel) => {
                 'is_due_payment', p.is_due_payment,
                 'due_date', p.due_date,
                 'notes', p.notes,
-                'created_at', p.created_at
+                'created_at', p.created_at,
+                'collected_by_name', COALESCE(sp2.full_name, u2.phone)
               ) ORDER BY p.created_at
             ) FILTER (WHERE p.id IS NOT NULL) as payment_history
      FROM enrollments e
@@ -245,6 +246,8 @@ const getSaleById = async (enrollmentId, userId, roleLevel) => {
      JOIN users u ON u.id = e.executive_id
      LEFT JOIN staff_profiles sp ON sp.user_id = u.id
      LEFT JOIN payments p ON p.enrollment_id = e.id
+     LEFT JOIN users u2 ON u2.id = p.executive_id
+     LEFT JOIN staff_profiles sp2 ON sp2.user_id = u2.id
      WHERE e.id = $1
      GROUP BY e.id, s.phone, s.name, c.name, b.name, sp.full_name, u.id`,
     [enrollmentId]
