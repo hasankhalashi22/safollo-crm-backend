@@ -27,7 +27,8 @@ const getPendingApprovals = async ({ userId, roleLevel }) => {
                 'payment_proof_url', p.payment_proof_url,
                 'created_at', p.created_at,
                 'is_due_payment', p.is_due_payment,
-                'approval_status', p.approval_status
+                'approval_status', p.approval_status,
+                'due_date', p.due_date
               ) ORDER BY p.created_at
             ) FILTER (WHERE p.id IS NOT NULL) as payment_history
      FROM enrollments e
