@@ -260,7 +260,7 @@ const getMe = async (userId) => {
   }
 
   const essResult = await query(
-    `SELECT id FROM hr_employees WHERE user_id = $1`, [userId]
+    `SELECT id, employment_type FROM hr_employees WHERE user_id = $1`, [userId]
   );
   const moduleAccessResult = await query(
     `SELECT ma.module_key, ma.role_key
@@ -271,6 +271,7 @@ const getMe = async (userId) => {
   const userData = result.rows[0];
   userData.has_ess = essResult.rows.length > 0;
   userData.employee_id = userData.has_ess ? essResult.rows[0].id : null;
+  userData.employment_type = userData.has_ess ? essResult.rows[0].employment_type : null;
   userData.module_access = moduleAccessResult.rows;
 
   return userData;
