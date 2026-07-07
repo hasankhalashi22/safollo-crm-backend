@@ -14,6 +14,7 @@ const uploadMemory = multer({ storage: multer.memoryStorage() });
 // Cron route — no authentication, protected by secret query param
 router.get('/cron/bkash-settlement', cronController.runBkashSettlement);
 router.get('/cron/rocket-settlement', cronController.runRocketSettlement);
+router.get('/cron/reprocess-all-settlements', cronController.reprocessAllSettlements);
 
 router.use(authenticate);
 router.use(authorizeModule('accounting'));

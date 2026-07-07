@@ -175,4 +175,88 @@ const runRocketSettlement = async () => {
     chargeRate,
   });
 };
-module.exports = { getTodayBkashTotal, getTodayRocketTotal, runBkashSettlement, runRocketSettlement, getAccountingDayWindow, getSettings, updateSetting };
+const reprocessAllSettlements = async () => {
+  // Get all distinct dates that have crm_sync revenue transactions
+  const datesResult = await query(
+    `SELECT DISTINCT transaction_date FROM acc_transactions
+     WHERE transaction_type = 'revenue' AND source = 'crm_sync'
+     ORDER BY transaction_date ASC`
+  );
+  const dates = datesResult.rows.map(r => r.transaction_date.toISOString().split('T')[0]);
+
+  const bkashRate = await getChargeRate('bkash_charge_rate');
+  const rocketRate = await getChargeRate('rocket_charge_rate');
+
+  const results = [];
+  for (const date of dates) {
+    // Delete existing settlements for this date
+    const existing = await query(
+      `SELECT * FROM acc_daily_settlements WHERE settlement_date = $1`, [date]
+    );
+    for (const old of existing.rows) {
+      await query('DELETE FROM acc_journal_entries WHERE transaction_id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
+      await query('DELETE FROM acc_transactions WHERE id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
+      await query('DELETE FROM acc_daily_settlements WHERE id = $1', [old.id]);
+    }
+
+    // Re-run both settlements for this date using a fake "now" that resolves to this date
+    const fakeDateBD = new Date(date + 'T12:00:00+06:00');
+    const bkashResult = await runSettlementForDate({ date, source: 'bkash', walletAccountName: 'bKash Wallet', destAccountName: 'BRAC Bank', chargeRate: bkashRate });
+    const rocketResult = await runSettlementForDate({ date, source: 'rocket', walletAccountName: 'Rocket Wallet', destAccountName: 'Dutch Bangla Bank', chargeRate: rocketRate });
+    results.push({ date, bkash: bkashResult, rocket: rocketResult });
+  }
+  return results;
+};
+
+// Settlement for a specific date (used for reprocessing)
+const runSettlementForDate = async ({ date, source, walletAccountName, destAccountName, chargeRate }) => {
+  const walletAccountId = await getAccountIdByName(walletAccountName);
+  const destAccountId = await getAccountIdByName(destAccountName);
+  const chargeAccountId = await getAccountIdByName('Bank Charges');
+
+  if (!walletAccountId || !destAccountId || !chargeAccountId) {
+    return { skipped: true, reason: `Required accounts not found` };
+  }
+
+  const result = await query(
+    `SELECT COALESCE(SUM(amount), 0) as total
+     FROM acc_transactions
+     WHERE debit_account_id = $1
+       AND transaction_type = 'revenue'
+       AND source = 'crm_sync'
+       AND transaction_date = $2`,
+    [walletAccountId, date]
+  );
+  const gross = parseFloat(result.rows[0].total);
+  if (gross <= 0) return { skipped: true, reason: 'No collection', date, gross };
+
+  const charge = Math.round(gross * chargeRate * 100) / 100;
+  const net = gross - charge;
+
+  return await withTransaction(async (client) => {
+    const transferTxn = await client.query(
+      `INSERT INTO acc_transactions (transaction_date, transaction_type, description, amount, debit_account_id, credit_account_id, source)
+       VALUES ($1, 'fund_transfer', $2, $3, $4, $5, 'auto_settlement') RETURNING *`,
+      [date, `${walletAccountName} সেটেলমেন্ট — ${date}`, net, destAccountId, walletAccountId]
+    );
+    await client.query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1,$2,'debit',$3,$4)`, [transferTxn.rows[0].id, destAccountId, net, date]);
+    await client.query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1,$2,'credit',$3,$4)`, [transferTxn.rows[0].id, walletAccountId, net, date]);
+
+    const chargeTxn = await client.query(
+      `INSERT INTO acc_transactions (transaction_date, transaction_type, description, amount, debit_account_id, credit_account_id, source)
+       VALUES ($1, 'expense', $2, $3, $4, $5, 'auto_settlement') RETURNING *`,
+      [date, `${walletAccountName} চার্জ (${(chargeRate * 100).toFixed(2)}%) — ${date}`, charge, chargeAccountId, walletAccountId]
+    );
+    await client.query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1,$2,'debit',$3,$4)`, [chargeTxn.rows[0].id, chargeAccountId, charge, date]);
+    await client.query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1,$2,'credit',$3,$4)`, [chargeTxn.rows[0].id, walletAccountId, charge, date]);
+
+    await client.query(
+      `INSERT INTO acc_daily_settlements (settlement_date, source, gross_amount, charge_amount, net_amount, transfer_transaction_id, charge_transaction_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [date, source, gross, charge, net, transferTxn.rows[0].id, chargeTxn.rows[0].id]
+    );
+    return { settled: true, date, gross, charge, net };
+  });
+};
+
+module.exports = { getTodayBkashTotal, getTodayRocketTotal, runBkashSettlement, runRocketSettlement, reprocessAllSettlements, getAccountingDayWindow, getSettings, updateSetting };

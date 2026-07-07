@@ -35,4 +35,14 @@ const updateSetting = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { runBkashSettlement, runRocketSettlement, getSettings, updateSetting };
+const reprocessAllSettlements = async (req, res, next) => {
+  try {
+    if (req.query.secret !== process.env.CRON_SECRET) {
+      return res.status(403).json({ success: false, message: 'Invalid secret' });
+    }
+    const results = await settlementService.reprocessAllSettlements();
+    res.json({ success: true, data: results, message: `${results.length} তারিখের settlement reprocessed` });
+  } catch (err) { next(err); }
+};
+
+module.exports = { runBkashSettlement, runRocketSettlement, reprocessAllSettlements, getSettings, updateSetting };
