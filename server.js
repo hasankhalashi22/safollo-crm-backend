@@ -800,6 +800,18 @@ await pool.query('ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_book BOOLEAN D
     } catch (e) {
       console.error('Super admin error:', e.message);
     }
+// Backfill proof_url from payments to acc_transactions for existing CRM-synced entries
+    await pool.query(`
+      UPDATE acc_transactions t
+      SET proof_url = p.payment_proof_url
+      FROM payments p
+      WHERE t.payment_id = p.id
+        AND t.source = 'crm_sync'
+        AND t.proof_url IS NULL
+        AND p.payment_proof_url IS NOT NULL
+    `);
+    console.log('✅ Backfilled proof_url from payments to acc_transactions');
+
 app.get('/debug-check-columns', async (req, res) => {
   try {
     const result = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name='acc_accounts' AND column_name IN ('shareholder_name','share_percentage')`);

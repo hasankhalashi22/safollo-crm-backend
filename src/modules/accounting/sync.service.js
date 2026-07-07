@@ -53,10 +53,10 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
           `INSERT INTO acc_transactions
              (transaction_date, transaction_type, description, amount,
               debit_account_id, credit_account_id, source, payment_id,
-              enrollment_id, created_by)
-           VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8)
+              enrollment_id, created_by, proof_url)
+           VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8, $9)
            RETURNING *`,
-          [txnDate, `বকেয়া পেমেন্ট সংগ্রহ`, payment.amount, assetAccountId, receivableAccountId, payment.id, enrollmentId, createdBy]
+          [txnDate, `বকেয়া পেমেন্ট সংগ্রহ`, payment.amount, assetAccountId, receivableAccountId, payment.id, enrollmentId, createdBy, payment.payment_proof_url || null]
         );
         const txn = txnResult.rows[0];
         await client.query(
@@ -75,10 +75,10 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
           `INSERT INTO acc_transactions
              (transaction_date, transaction_type, description, amount,
               debit_account_id, credit_account_id, source, payment_id,
-              enrollment_id, created_by)
-           VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8)
+              enrollment_id, created_by, proof_url)
+           VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8, $9)
            RETURNING *`,
-          [txnDate, `নতুন এনরোলমেন্ট পেমেন্ট`, payment.amount, assetAccountId, revenueAccountId, payment.id, enrollmentId, createdBy]
+          [txnDate, `নতুন এনরোলমেন্ট পেমেন্ট`, payment.amount, assetAccountId, revenueAccountId, payment.id, enrollmentId, createdBy, payment.payment_proof_url || null]
         );
         const txn = txnResult.rows[0];
         await client.query(
