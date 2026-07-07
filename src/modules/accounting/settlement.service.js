@@ -87,9 +87,9 @@ const runSettlement = async ({ source, walletAccountName, destAccountName, charg
   // If already settled, delete old transactions and re-settle with updated totals
   if (existing.rows.length > 0) {
     const old = existing.rows[0];
-    await query('DELETE FROM acc_journal_entries WHERE transaction_id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
-    await query('DELETE FROM acc_transactions WHERE id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
     await query('DELETE FROM acc_daily_settlements WHERE id = $1', [old.id]);
+    await query('DELETE FROM acc_journal_entries WHERE transaction_id = $1 OR transaction_id = $2', [old.transfer_transaction_id, old.charge_transaction_id]);
+    await query('DELETE FROM acc_transactions WHERE id = $1 OR id = $2', [old.transfer_transaction_id, old.charge_transaction_id]);
   }
 
   const result = await query(
@@ -194,9 +194,9 @@ const reprocessAllSettlements = async () => {
       `SELECT * FROM acc_daily_settlements WHERE settlement_date = $1`, [date]
     );
     for (const old of existing.rows) {
-      await query('DELETE FROM acc_journal_entries WHERE transaction_id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
-      await query('DELETE FROM acc_transactions WHERE id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
       await query('DELETE FROM acc_daily_settlements WHERE id = $1', [old.id]);
+      await query('DELETE FROM acc_journal_entries WHERE transaction_id = $1 OR transaction_id = $2', [old.transfer_transaction_id, old.charge_transaction_id]);
+      await query('DELETE FROM acc_transactions WHERE id = $1 OR id = $2', [old.transfer_transaction_id, old.charge_transaction_id]);
     }
 
     // Re-run both settlements for this date using a fake "now" that resolves to this date
