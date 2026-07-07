@@ -48,7 +48,7 @@ const getAccountIdByName = async (name) => {
 };
 
 const getTodayCollectionTotal = async (accountName) => {
-  const { startUTC, endUTC } = getAccountingDayWindow();
+  const { settlementDate } = getAccountingDayWindow();
   const accountId = await getAccountIdByName(accountName);
   if (!accountId) return 0;
 
@@ -58,8 +58,8 @@ const getTodayCollectionTotal = async (accountName) => {
      WHERE debit_account_id = $1
        AND transaction_type = 'revenue'
        AND source = 'crm_sync'
-       AND created_at >= $2 AND created_at < $3`,
-    [accountId, startUTC.toISOString(), endUTC.toISOString()]
+       AND transaction_date = $2`,
+    [accountId, settlementDate]
   );
   return parseFloat(result.rows[0].total);
 };
@@ -81,11 +81,15 @@ const runSettlement = async ({ source, walletAccountName, destAccountName, charg
   }
 
   const existing = await query(
-    'SELECT id FROM acc_daily_settlements WHERE settlement_date = $1 AND source = $2',
+    'SELECT * FROM acc_daily_settlements WHERE settlement_date = $1 AND source = $2',
     [settlementDate, source]
   );
+  // If already settled, delete old transactions and re-settle with updated totals
   if (existing.rows.length > 0) {
-    return { skipped: true, reason: 'Already settled', settlementDate };
+    const old = existing.rows[0];
+    await query('DELETE FROM acc_journal_entries WHERE transaction_id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
+    await query('DELETE FROM acc_transactions WHERE id IN ($1, $2)', [old.transfer_transaction_id, old.charge_transaction_id]);
+    await query('DELETE FROM acc_daily_settlements WHERE id = $1', [old.id]);
   }
 
   const result = await query(
@@ -94,8 +98,8 @@ const runSettlement = async ({ source, walletAccountName, destAccountName, charg
      WHERE debit_account_id = $1
        AND transaction_type = 'revenue'
        AND source = 'crm_sync'
-       AND created_at >= $2 AND created_at < $3`,
-    [walletAccountId, startUTC.toISOString(), endUTC.toISOString()]
+       AND transaction_date = $2`,
+    [walletAccountId, settlementDate]
   );
   const gross = parseFloat(result.rows[0].total);
 
