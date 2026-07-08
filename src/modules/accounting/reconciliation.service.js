@@ -25,7 +25,10 @@ const getReconciliation = async ({ date_from, date_to }) => {
     [date_from, date_to].filter(Boolean)
   );
 
-  // 2. Accounting: crm_sync transactions grouped by date + debit account
+  // 2. Accounting: crm_sync transactions grouped by date + debit account (exclude AR debits)
+  const arAccount = await query(`SELECT id FROM acc_accounts WHERE name = 'Accounts Receivable'`);
+  const arAccountId = arAccount.rows[0]?.id;
+
   const accResult = await query(
     `SELECT
        t.transaction_date as date,
@@ -35,17 +38,18 @@ const getReconciliation = async ({ date_from, date_to }) => {
      FROM acc_transactions t
      JOIN acc_accounts a ON a.id = t.debit_account_id
      WHERE t.source = 'crm_sync' AND t.transaction_type = 'revenue'
-       ${date_from ? `AND t.transaction_date >= $1` : ''}
-       ${date_to ? `AND t.transaction_date <= ${date_from ? '$2' : '$1'}` : ''}
+       AND t.debit_account_id != $1
+       ${date_from ? `AND t.transaction_date >= $2` : ''}
+       ${date_to ? `AND t.transaction_date <= ${date_from ? '$3' : '$2'}` : ''}
      GROUP BY t.transaction_date, a.name
      ORDER BY t.transaction_date DESC, a.name`,
-    [date_from, date_to].filter(Boolean)
+    [arAccountId, date_from, date_to].filter(Boolean)
   );
 
-  // 3. Merge by date + method
+  // 3. Merge payment reconciliation by date + method
   const crmMap = {};
   for (const row of crmResult.rows) {
-    const d = row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date;
+    const d = row.date instanceof Date ? row.date.toISOString().split('T')[0] : String(row.date);
     const key = `${d}__${row.payment_method}`;
     crmMap[key] = { date: d, method: row.payment_method, crm_count: Number(row.count), crm_total: Number(row.total) };
   }
@@ -53,7 +57,7 @@ const getReconciliation = async ({ date_from, date_to }) => {
   const accMap = {};
   const ACCOUNT_TO_METHOD = Object.fromEntries(Object.entries(METHOD_TO_ACCOUNT).map(([k, v]) => [v, k]));
   for (const row of accResult.rows) {
-    const d = row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date;
+    const d = row.date instanceof Date ? row.date.toISOString().split('T')[0] : String(row.date);
     const method = ACCOUNT_TO_METHOD[row.account_name] || row.account_name;
     const key = `${d}__${method}`;
     accMap[key] = { date: d, method, acc_count: Number(row.count), acc_total: Number(row.total) };
@@ -88,7 +92,53 @@ const getReconciliation = async ({ date_from, date_to }) => {
     matched_count: rows.filter(r => r.matched).length,
   };
 
-  return { rows, summary };
+  // 4. AR vs CRM dues reconciliation (per enrollment)
+  const arRows = await query(
+    `SELECT
+       e.id as enrollment_id,
+       s.name as student_name,
+       s.phone as student_phone,
+       c.name as course_name,
+       e.course_price,
+       e.total_collected,
+       (e.course_price - e.total_collected) as crm_due,
+       COALESCE((
+         SELECT SUM(CASE WHEN t.debit_account_id = $1 THEN t.amount ELSE -t.amount END)
+         FROM acc_transactions t
+         WHERE t.enrollment_id = e.id
+           AND t.source = 'crm_sync'
+           AND (t.debit_account_id = $1 OR t.credit_account_id = $1)
+       ), 0) as acc_ar_balance
+     FROM enrollments e
+     JOIN students s ON s.id = e.student_id
+     JOIN courses c ON c.id = e.course_id
+     WHERE e.approval_status = 'approved'
+       AND e.payment_status IN ('due', 'partial')
+     ORDER BY e.approved_at DESC`,
+    [arAccountId]
+  );
+
+  const arReconciliation = arRows.rows.map(r => ({
+    enrollment_id: r.enrollment_id,
+    student_name: r.student_name,
+    student_phone: r.student_phone,
+    course_name: r.course_name,
+    course_price: Number(r.course_price),
+    total_collected: Number(r.total_collected),
+    crm_due: Number(r.crm_due),
+    acc_ar_balance: Number(r.acc_ar_balance),
+    diff: Number(r.crm_due) - Number(r.acc_ar_balance),
+    matched: Math.abs(Number(r.crm_due) - Number(r.acc_ar_balance)) < 0.01,
+  }));
+
+  const arSummary = {
+    total_crm_due: arReconciliation.reduce((s, r) => s + r.crm_due, 0),
+    total_acc_ar: arReconciliation.reduce((s, r) => s + r.acc_ar_balance, 0),
+    mismatch_count: arReconciliation.filter(r => !r.matched).length,
+    matched_count: arReconciliation.filter(r => r.matched).length,
+  };
+
+  return { rows, summary, arReconciliation, arSummary };
 };
 
 module.exports = { getReconciliation };
