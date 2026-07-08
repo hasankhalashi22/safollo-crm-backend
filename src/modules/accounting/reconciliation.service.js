@@ -17,7 +17,8 @@ const getReconciliation = async ({ date_from, date_to }) => {
        COUNT(*) as count,
        COALESCE(SUM(p.amount), 0) as total
      FROM payments p
-     WHERE p.approval_status = 'approved'
+     JOIN enrollments e ON e.id = p.enrollment_id
+     WHERE p.approval_status = 'approved' AND e.approval_status = 'approved'
        ${date_from ? `AND DATE(p.created_at) >= $1` : ''}
        ${date_to ? `AND DATE(p.created_at) <= ${date_from ? '$2' : '$1'}` : ''}
      GROUP BY DATE(p.created_at), p.payment_method
