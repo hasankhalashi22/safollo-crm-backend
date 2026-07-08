@@ -1,4 +1,4 @@
-const { addDuePayment } = require('./payments.service');
+const { addDuePayment, updatePaymentAmount } = require('./payments.service');
 const { query } = require('../../config/database');
 
 const addPayment = async (req, res, next) => {
@@ -19,4 +19,11 @@ const cancelPayment = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { addPayment, cancelPayment };
+const updatePayment = async (req, res, next) => {
+  try {
+    const result = await updatePaymentAmount(req.params.id, req.body.amount, req.user.id);
+    res.json({ success: true, ...result, message: 'Payment আপডেট হয়েছে' });
+  } catch (err) { next(err); }
+};
+
+module.exports = { addPayment, cancelPayment, updatePayment };
