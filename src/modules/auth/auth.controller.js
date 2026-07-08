@@ -1,59 +1,25 @@
 const authService = require('./auth.service');
 
-const sendOtp = async (req, res, next) => {
+const login = async (req, res, next) => {
   try {
-    console.log('Request body:', req.body);
-    const phone = req.body?.phone || req.body?.Phone;
-    const result = await authService.sendOtp(phone);
-    res.json({ success: true, ...result });
-  } catch (err) { next(err); }
-};
-
-const verifyOtp = async (req, res, next) => {
-  try {
-    const { phone, code } = req.body;
+    const { phone, pin } = req.body;
     const deviceInfo = req.headers['user-agent'];
-    const result = await authService.verifyOtp(phone, code, deviceInfo);
+    const result = await authService.loginWithPin(phone, pin, deviceInfo);
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 };
 
-const verifyOtpFirstLogin = async (req, res, next) => {
+const changePin = async (req, res, next) => {
   try {
-    const { phone, code } = req.body;
-    const result = await authService.verifyOtpFirstLogin(phone, code);
+    const { old_pin, new_pin } = req.body;
+    const result = await authService.changePin(req.user.id, old_pin, new_pin);
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 };
 
-const setPassword = async (req, res, next) => {
+const resetPin = async (req, res, next) => {
   try {
-    const { phone, password } = req.body;
-    const result = await authService.setPassword(phone, password);
-    res.json({ success: true, ...result });
-  } catch (err) { next(err); }
-};
-
-const loginWithPassword = async (req, res, next) => {
-  try {
-    const { phone, password } = req.body;
-    const deviceInfo = req.headers['user-agent'];
-    const result = await authService.loginWithPassword(phone, password, deviceInfo);
-    res.json({ success: true, ...result });
-  } catch (err) { next(err); }
-};
-
-const changePassword = async (req, res, next) => {
-  try {
-    const { old_password, new_password } = req.body;
-    const result = await authService.changePassword(req.user.id, old_password, new_password);
-    res.json({ success: true, ...result });
-  } catch (err) { next(err); }
-};
-
-const resetPassword = async (req, res, next) => {
-  try {
-    const result = await authService.resetPassword(req.params.userId);
+    const result = await authService.resetPin(req.params.userId);
     res.json({ success: true, ...result });
   } catch (err) { next(err); }
 };
@@ -73,4 +39,4 @@ const getMe = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { sendOtp, verifyOtp, verifyOtpFirstLogin, setPassword, loginWithPassword, changePassword, resetPassword, logout, getMe };
+module.exports = { login, changePin, resetPin, logout, getMe };

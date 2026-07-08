@@ -1,33 +1,22 @@
 const { query } = require('../../config/database');
 
-// Create new user (admin only)
-const bcrypt = require('bcryptjs');
-
-const DEFAULT_PASSWORD = '1234';
-
 const createUser = async (data, createdBy) => {
   const { phone, role_id, manager_id, joining_date } = data;
 
-  const hashedDefaultPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
-
   const result = await query(
-    `INSERT INTO users (phone, role_id, manager_id, joining_date, created_by, password, is_first_login)
-     VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+    `INSERT INTO users (phone, role_id, manager_id, joining_date, created_by, pin, pin_changed, is_first_login)
+     VALUES ($1, $2, $3, $4, $5, '0000', FALSE, TRUE)
      RETURNING id, phone, role_id, is_active, joining_date, created_at`,
-    [phone, role_id, manager_id || null, joining_date || null, createdBy, hashedDefaultPassword]
+    [phone, role_id, manager_id || null, joining_date || null, createdBy]
   );
 
-  // Create empty profile
-  await query(
-    'INSERT INTO staff_profiles (user_id) VALUES ($1)',
-    [result.rows[0].id]
-  );
+  await query('INSERT INTO staff_profiles (user_id) VALUES ($1)', [result.rows[0].id]);
 
   return result.rows[0];
 };
 
 // Get all users (with filters)
-const getUsers = async ({ role, is_active, manager_id, page = 1, limit = 20 }) => {
+const getUsers = async ({ role, is_active, manager_id, page = 1, limit = 20 }, requester) => {
   const conditions = [];
   const params = [];
   let idx = 1;
@@ -50,6 +39,7 @@ const getUsers = async ({ role, is_active, manager_id, page = 1, limit = 20 }) =
 
   const result = await query(
     `SELECT u.id, u.phone, u.is_active, u.joining_date, u.is_profile_complete,
+            u.pin, u.pin_changed,
             r.name as role, r.label as role_label, r.level as role_level,
             sp.full_name, sp.photo_url,
             m_sp.full_name as manager_name
@@ -69,8 +59,14 @@ const getUsers = async ({ role, is_active, manager_id, page = 1, limit = 20 }) =
     params
   );
 
+  const isSuperAdmin = requester?.role === 'super_admin';
+  const data = result.rows.map(u => {
+    if (!isSuperAdmin) { const { pin, ...rest } = u; return rest; }
+    return u;
+  });
+
   return {
-    data:  result.rows,
+    data,
     total: parseInt(countResult.rows[0].count),
     page,
     limit,
