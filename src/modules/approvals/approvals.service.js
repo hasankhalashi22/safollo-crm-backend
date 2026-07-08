@@ -160,19 +160,35 @@ const rejectSale = async (enrollmentId, rejectorId, rejectorName, reason) => {
 
 // Approve due payment
 const approveDuePayment = async (paymentId, approverId, approverName) => {
-  const result = await query(
-    `UPDATE payments SET
-       approval_status = 'approved',
-       approved_by = $2,
-       approved_at = NOW(),
-       approver_name = $3
-     WHERE id = $1 AND approval_status = 'pending'
-     RETURNING *`,
-    [paymentId, approverId, approverName]
-  );
+  return await withTransaction(async (client) => {
+    const paymentResult = await client.query(
+      `SELECT p.*, e.course_price, e.total_collected
+       FROM payments p
+       JOIN enrollments e ON e.id = p.enrollment_id
+       WHERE p.id = $1 AND p.approval_status = 'pending'`,
+      [paymentId]
+    );
+    if (paymentResult.rows.length === 0) throw { statusCode: 400, message: 'Payment পাওয়া যায়নি বা আগেই process হয়েছে' };
 
-  if (result.rows.length === 0) throw { statusCode: 400, message: 'Payment পাওয়া যায়নি বা আগেই process হয়েছে' };
-  return result.rows[0];
+    const payment = paymentResult.rows[0];
+    const remaining = Number(payment.course_price) - Number(payment.total_collected);
+    if (Number(payment.amount) > remaining) {
+      throw { statusCode: 400, message: `Overpayment হবে। বাকি আছে ৳${remaining}, কিন্তু payment ৳${payment.amount}। অনুমোদন করা যাবে না।` };
+    }
+
+    const result = await client.query(
+      `UPDATE payments SET
+         approval_status = 'approved',
+         approved_by = $2,
+         approved_at = NOW(),
+         approver_name = $3
+       WHERE id = $1
+       RETURNING *`,
+      [paymentId, approverId, approverName]
+    );
+
+    return result.rows[0];
+  });
 };
 
 // Reject due payment
