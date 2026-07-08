@@ -12,15 +12,15 @@ const getReconciliation = async ({ date_from, date_to }) => {
   // 1. CRM: approved payments grouped by date + method
   const crmResult = await query(
     `SELECT
-       DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Dhaka') as date,
+       DATE(p.created_at) as date,
        p.payment_method,
        COUNT(*) as count,
        COALESCE(SUM(p.amount), 0) as total
      FROM payments p
      WHERE p.approval_status = 'approved'
-       ${date_from ? `AND DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Dhaka') >= $1` : ''}
-       ${date_to ? `AND DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Dhaka') <= ${date_from ? '$2' : '$1'}` : ''}
-     GROUP BY DATE((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Dhaka'), p.payment_method
+       ${date_from ? `AND DATE(p.created_at) >= $1` : ''}
+       ${date_to ? `AND DATE(p.created_at) <= ${date_from ? '$2' : '$1'}` : ''}
+     GROUP BY DATE(p.created_at), p.payment_method
      ORDER BY date DESC, p.payment_method`,
     [date_from, date_to].filter(Boolean)
   );

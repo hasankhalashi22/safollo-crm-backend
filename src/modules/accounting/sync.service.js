@@ -40,11 +40,7 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
     const existing = await query('SELECT id FROM acc_transactions WHERE payment_id = $1', [payment.id]);
     if (existing.rows.length > 0) return;
 
-    const toDateBD = (d) => {
-      const dt = d ? new Date(d) : new Date();
-      return dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
-    };
-    const txnDate = toDateBD(payment.created_at);
+    const txnDate = payment.created_at ? payment.created_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
 
     if (payment.is_due_payment) {
       // Due payment: Cash/bKash Dr, Accounts Receivable Cr
@@ -123,11 +119,7 @@ const syncReceivableOnApproval = async (enrollment, createdBy) => {
     );
     if (existing.rows.length > 0) return;
 
-    const toDateBD = (d) => {
-      const dt = d ? new Date(d) : new Date();
-      return dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
-    };
-    const txnDate = toDateBD(enrollment.approved_at);
+    const txnDate = enrollment.approved_at ? enrollment.approved_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
 
     await withTransaction(async (client) => {
       const txnResult = await client.query(
