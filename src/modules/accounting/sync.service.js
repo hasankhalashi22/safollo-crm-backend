@@ -99,7 +99,9 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
 // Create Accounts Receivable entry when enrollment has due amount at approval time
 const syncReceivableOnApproval = async (enrollment, createdBy) => {
   try {
-    const dueAmount = Number(enrollment.course_price) - Number(enrollment.total_collected);
+    const dueAmount = enrollment._override_due !== undefined
+      ? Number(enrollment._override_due)
+      : Number(enrollment.course_price) - Number(enrollment.total_collected);
     if (dueAmount <= 0) return;
 
     const courseCheck = await query(`SELECT is_book FROM courses WHERE id = $1`, [enrollment.course_id]);
@@ -197,40 +199,78 @@ const backfillMissingPayments = async (createdBy) => {
     }
   }
 
-  // 2. Missing AR receivable entries for enrollments with due amounts
-  const arResult = await query(
-    `SELECT e.*
+  const receivableAccountId = await getAccountIdByName('Accounts Receivable');
+
+  // 2. Missing AR receivable entries — create with correct amount (current_due + already synced AR credits)
+  const arMissingResult = await query(
+    `SELECT e.*,
+       COALESCE((
+         SELECT SUM(t.amount) FROM acc_transactions t
+         WHERE t.enrollment_id = e.id AND t.credit_account_id = $1 AND t.source = 'crm_sync'
+       ), 0) as existing_ar_credits
      FROM enrollments e
      WHERE e.approval_status = 'approved'
        AND e.payment_status IN ('due', 'partial')
        AND (e.course_price - e.total_collected) > 0
        AND NOT EXISTS (
          SELECT 1 FROM acc_transactions t
-         WHERE t.enrollment_id = e.id
-           AND t.source = 'crm_sync'
-           AND t.description LIKE '%বাকি%'
+         WHERE t.enrollment_id = e.id AND t.source = 'crm_sync' AND t.description LIKE '%বাকি%'
        )
-     ORDER BY e.approved_at ASC`
+     ORDER BY e.approved_at ASC`,
+    [receivableAccountId]
   );
 
   let arSynced = 0;
 
-  for (const enrollment of arResult.rows) {
+  for (const enrollment of arMissingResult.rows) {
     try {
-      await syncReceivableOnApproval(enrollment, createdBy);
+      const correctDue = Number(enrollment.course_price) - Number(enrollment.total_collected) + Number(enrollment.existing_ar_credits);
+      await syncReceivableOnApproval({ ...enrollment, _override_due: correctDue }, createdBy);
       arSynced++;
     } catch (err) {
       failed.push({ enrollment_id: enrollment.id, error: err.message });
     }
   }
 
+  // 3. Fix existing AR entries where amount is wrong (created before this fix)
+  const arWrongResult = await query(
+    `SELECT e.id as enrollment_id, e.course_price, e.total_collected,
+       t.id as txn_id, t.amount as ar_dr_amount,
+       COALESCE((
+         SELECT SUM(t2.amount) FROM acc_transactions t2
+         WHERE t2.enrollment_id = e.id AND t2.credit_account_id = $1 AND t2.source = 'crm_sync'
+       ), 0) as existing_ar_credits
+     FROM enrollments e
+     JOIN acc_transactions t ON t.enrollment_id = e.id AND t.debit_account_id = $1
+       AND t.source = 'crm_sync' AND t.description LIKE '%বাকি%'
+     WHERE e.approval_status = 'approved'`,
+    [receivableAccountId]
+  );
+
+  let arCorrected = 0;
+
+  for (const row of arWrongResult.rows) {
+    const correctDue = Number(row.course_price) - Number(row.total_collected) + Number(row.existing_ar_credits);
+    if (Math.abs(correctDue - Number(row.ar_dr_amount)) > 0.01) {
+      try {
+        await query(`UPDATE acc_transactions SET amount = $1 WHERE id = $2`, [correctDue, row.txn_id]);
+        await query(`UPDATE acc_journal_entries SET amount = $1 WHERE transaction_id = $2 AND entry_type = 'debit'`, [correctDue, row.txn_id]);
+        await query(`UPDATE acc_journal_entries SET amount = $1 WHERE transaction_id = $2 AND entry_type = 'credit'`, [correctDue, row.txn_id]);
+        arCorrected++;
+      } catch (err) {
+        failed.push({ enrollment_id: row.enrollment_id, error: err.message });
+      }
+    }
+  }
+
   return {
     payments_total: paymentResult.rows.length,
     payments_synced: paymentsSynced,
-    ar_total: arResult.rows.length,
+    ar_total: arMissingResult.rows.length,
     ar_synced: arSynced,
+    ar_corrected: arCorrected,
     failed,
-    message: `${paymentsSynced}টি payment ও ${arSynced}টি AR entry sync হয়েছে`,
+    message: `${paymentsSynced}টি payment, ${arSynced}টি নতুন AR entry ও ${arCorrected}টি AR correction sync হয়েছে`,
   };
 };
 
