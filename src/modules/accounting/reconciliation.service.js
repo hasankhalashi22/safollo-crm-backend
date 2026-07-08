@@ -115,8 +115,8 @@ const getReconciliation = async ({ date_from, date_to }) => {
      JOIN courses c ON c.id = e.course_id
      WHERE e.approval_status = 'approved'
        AND e.payment_status IN ('due', 'partial')
-       ${date_from ? `AND DATE(e.approved_at) >= $2` : ''}
-       ${date_to ? `AND DATE(e.approved_at) <= ${date_from ? '$3' : '$2'}` : ''}
+       ${date_from ? `AND DATE(e.created_at) >= $2` : ''}
+       ${date_to ? `AND DATE(e.created_at) <= ${date_from ? '$3' : '$2'}` : ''}
      ORDER BY e.approved_at DESC`,
     [arAccountId, date_from, date_to].filter(Boolean)
   );
