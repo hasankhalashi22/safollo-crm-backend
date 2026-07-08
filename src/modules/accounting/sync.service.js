@@ -179,4 +179,33 @@ const removeSyncedByEnrollment = async (enrollmentId) => {
   }
 };
 
-module.exports = { syncPaymentToAccounting, syncReceivableOnApproval, removeSyncedTransaction, removeSyncedByEnrollment };
+// Backfill all approved CRM payments that are missing from accounting
+const backfillMissingPayments = async (createdBy) => {
+  const result = await query(
+    `SELECT p.*, e.id as enrollment_id
+     FROM payments p
+     JOIN enrollments e ON e.id = p.enrollment_id
+     WHERE p.approval_status = 'approved'
+       AND NOT EXISTS (
+         SELECT 1 FROM acc_transactions t WHERE t.payment_id = p.id
+       )
+     ORDER BY p.created_at ASC`
+  );
+
+  const payments = result.rows;
+  let synced = 0;
+  const failed = [];
+
+  for (const payment of payments) {
+    try {
+      await syncPaymentToAccounting(payment, payment.enrollment_id, createdBy);
+      synced++;
+    } catch (err) {
+      failed.push({ payment_id: payment.id, error: err.message });
+    }
+  }
+
+  return { total: payments.length, synced, failed };
+};
+
+module.exports = { syncPaymentToAccounting, syncReceivableOnApproval, removeSyncedTransaction, removeSyncedByEnrollment, backfillMissingPayments };
