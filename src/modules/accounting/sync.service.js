@@ -171,9 +171,10 @@ const removeSyncedByEnrollment = async (enrollmentId) => {
   }
 };
 
-// Backfill all approved CRM payments that are missing from accounting
+// Backfill all approved CRM payments + missing AR entries
 const backfillMissingPayments = async (createdBy) => {
-  const result = await query(
+  // 1. Missing payment entries
+  const paymentResult = await query(
     `SELECT p.*, e.id as enrollment_id
      FROM payments p
      JOIN enrollments e ON e.id = p.enrollment_id
@@ -184,20 +185,53 @@ const backfillMissingPayments = async (createdBy) => {
      ORDER BY p.created_at ASC`
   );
 
-  const payments = result.rows;
-  let synced = 0;
+  let paymentsSynced = 0;
   const failed = [];
 
-  for (const payment of payments) {
+  for (const payment of paymentResult.rows) {
     try {
       await syncPaymentToAccounting(payment, payment.enrollment_id, createdBy);
-      synced++;
+      paymentsSynced++;
     } catch (err) {
       failed.push({ payment_id: payment.id, error: err.message });
     }
   }
 
-  return { total: payments.length, synced, failed };
+  // 2. Missing AR receivable entries for enrollments with due amounts
+  const arResult = await query(
+    `SELECT e.*
+     FROM enrollments e
+     WHERE e.approval_status = 'approved'
+       AND e.payment_status IN ('due', 'partial')
+       AND (e.course_price - e.total_collected) > 0
+       AND NOT EXISTS (
+         SELECT 1 FROM acc_transactions t
+         WHERE t.enrollment_id = e.id
+           AND t.source = 'crm_sync'
+           AND t.description LIKE '%বাকি%'
+       )
+     ORDER BY e.approved_at ASC`
+  );
+
+  let arSynced = 0;
+
+  for (const enrollment of arResult.rows) {
+    try {
+      await syncReceivableOnApproval(enrollment, createdBy);
+      arSynced++;
+    } catch (err) {
+      failed.push({ enrollment_id: enrollment.id, error: err.message });
+    }
+  }
+
+  return {
+    payments_total: paymentResult.rows.length,
+    payments_synced: paymentsSynced,
+    ar_total: arResult.rows.length,
+    ar_synced: arSynced,
+    failed,
+    message: `${paymentsSynced}টি payment ও ${arSynced}টি AR entry sync হয়েছে`,
+  };
 };
 
 module.exports = { syncPaymentToAccounting, syncReceivableOnApproval, removeSyncedTransaction, removeSyncedByEnrollment, backfillMissingPayments };
