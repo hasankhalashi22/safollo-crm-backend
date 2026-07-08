@@ -14,7 +14,7 @@ const getEmployees = async () => {
      )
      SELECT he.*, pos.title as position_title,
             mgr.full_name as reports_to_name,
-            u.phone as crm_phone, r.label as crm_role_label,
+            u.phone as crm_phone, r.label as crm_role_label, u.pin as crm_pin, u.pin_changed as crm_pin_changed,
             COALESCE(pt.tier, 999) as position_tier
      FROM hr_employees he
      LEFT JOIN hr_positions pos ON pos.id = he.position_id
