@@ -121,7 +121,7 @@ const syncReceivableOnApproval = async (enrollment, createdBy) => {
     );
     if (existing.rows.length > 0) return;
 
-    const txnDate = enrollment.approved_at ? enrollment.approved_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    const txnDate = enrollment.created_at ? enrollment.created_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
 
     await withTransaction(async (client) => {
       const txnResult = await client.query(
