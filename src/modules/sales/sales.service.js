@@ -189,6 +189,7 @@ console.log('Manager params:', params);
                 'sender_number', p.sender_number,
                 'payment_proof_url', p.payment_proof_url,
                 'is_due_payment', p.is_due_payment,
+                'approval_status', p.approval_status,
                 'created_at', p.created_at
               ) ORDER BY p.created_at
             ) FROM payments p WHERE p.enrollment_id = e.id) as payment_history
