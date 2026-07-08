@@ -52,4 +52,37 @@ const updatePaymentAmount = async (paymentId, newAmount, updatedBy) => {
   });
 };
 
-module.exports = { addDuePayment, updatePaymentAmount };
+const deletePaymentByAdmin = async (paymentId) => {
+  return await withTransaction(async (client) => {
+    const paymentResult = await client.query(
+      `SELECT p.*, e.course_price, e.total_collected
+       FROM payments p JOIN enrollments e ON e.id = p.enrollment_id
+       WHERE p.id = $1`,
+      [paymentId]
+    );
+    if (paymentResult.rows.length === 0) throw { statusCode: 404, message: 'Payment পাওয়া যায়নি' };
+
+    const payment = paymentResult.rows[0];
+
+    // Reverse from enrollment if approved
+    if (payment.approval_status === 'approved') {
+      await client.query(
+        `UPDATE enrollments SET
+           total_collected = total_collected - $1,
+           payment_status = CASE
+             WHEN total_collected - $1 <= 0 THEN 'due'
+             WHEN total_collected - $1 < course_price THEN 'partial'
+             ELSE 'paid'
+           END
+         WHERE id = $2`,
+        [payment.amount, payment.enrollment_id]
+      );
+      await removeSyncedTransaction(paymentId);
+    }
+
+    await client.query(`DELETE FROM payments WHERE id = $1`, [paymentId]);
+    return { success: true };
+  });
+};
+
+module.exports = { addDuePayment, updatePaymentAmount, deletePaymentByAdmin };
