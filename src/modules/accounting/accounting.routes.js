@@ -8,6 +8,7 @@ const { authenticate, authorizeModule } = require('../../middleware/authenticate
 const { uploadPayment } = require('../../config/cloudinary');
 const multer = require('multer');
 const statementController = require('./statement.controller');
+const reconciliationService = require('./reconciliation.service');
 const uploadMemory = multer({ storage: multer.memoryStorage() });
 
 
@@ -43,6 +44,13 @@ router.post('/card-statements/confirm', uploadMemory.any(), statementController.
 router.post('/transactions/distribute-profit', transactionsController.distributeProfitToShareholders);
 router.get('/shareholders', accountsController.getShareholdersOverview);
 router.get('/journal', accountsController.getGeneralJournal);
+router.get('/reconciliation', async (req, res, next) => {
+  try {
+    const { date_from, date_to } = req.query;
+    const result = await reconciliationService.getReconciliation({ date_from, date_to });
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+});
 
 router.post('/transactions', uploadPayment.single('proof'), transactionsController.createTransaction);
 router.get('/transactions', transactionsController.getTransactions);
