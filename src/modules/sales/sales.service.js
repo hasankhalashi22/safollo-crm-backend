@@ -102,6 +102,10 @@ const addDuePayment = async (data, executiveId, paymentProofFile) => {
     throw { statusCode: 400, message: 'এই স্টুডেন্টের পেমেন্ট সম্পূর্ণ হয়ে গেছে' };
   }
 
+  if (enrollment.approval_status !== 'approved') {
+    throw { statusCode: 400, message: 'এনরোলমেন্ট এখনো approve হয়নি। Approve হওয়ার পর বকেয়া payment নেওয়া যাবে।' };
+  }
+
   const pendingCheck = await query(
     `SELECT id FROM payments WHERE enrollment_id = $1 AND approval_status = 'pending'`,
     [enrollment_id]
