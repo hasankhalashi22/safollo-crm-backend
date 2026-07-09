@@ -52,6 +52,36 @@ const updatePaymentAmount = async (paymentId, newAmount, updatedBy) => {
   });
 };
 
+const VALID_METHODS = ['bkash', 'nagad', 'rocket', 'cash', 'cod'];
+
+const updatePaymentMethod = async (paymentId, newMethod, updatedBy) => {
+  if (!VALID_METHODS.includes(newMethod)) throw { statusCode: 400, message: 'অবৈধ payment method' };
+
+  return await withTransaction(async (client) => {
+    const paymentResult = await client.query(
+      `SELECT p.*, e.course_price, e.total_collected
+       FROM payments p
+       JOIN enrollments e ON e.id = p.enrollment_id
+       WHERE p.id = $1`,
+      [paymentId]
+    );
+    if (paymentResult.rows.length === 0) throw { statusCode: 404, message: 'Payment পাওয়া যায়নি' };
+
+    const payment = paymentResult.rows[0];
+
+    await client.query(`UPDATE payments SET payment_method = $1 WHERE id = $2`, [newMethod, paymentId]);
+
+    // Re-sync accounting if payment was approved
+    if (payment.approval_status === 'approved') {
+      await removeSyncedTransaction(paymentId);
+      const updated = { ...payment, payment_method: newMethod };
+      await syncPaymentToAccounting(updated, payment.enrollment_id, updatedBy);
+    }
+
+    return { success: true };
+  });
+};
+
 const deletePaymentByAdmin = async (paymentId) => {
   return await withTransaction(async (client) => {
     const paymentResult = await client.query(
