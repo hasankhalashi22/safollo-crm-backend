@@ -76,7 +76,7 @@ const getTransactions = async ({ date_from, date_to, transaction_type, account_i
             ca.name as credit_account_name,
             u.phone as created_by_phone,
             sp.full_name as created_by_name,
-            s.full_name as student_name,
+            s.name as student_name,
             s.phone as student_phone
      FROM acc_transactions t
      LEFT JOIN acc_accounts da ON da.id = t.debit_account_id
