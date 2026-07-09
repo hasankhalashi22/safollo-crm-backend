@@ -27,14 +27,12 @@ const createSale = async (req, res, next) => {
 
 const getSales = async (req, res, next) => {
   try {
-    const { course_id, payment_status, date_from, date_to, search, page, limit, executive_id } = req.query;
-    console.log('Sales filter:', req.query);
-    console.log('User info:', { id: req.user.id, role: req.user.role, roleLevel: req.user.role_level });
+    const { course_id, payment_status, date_from, date_to, search, page, limit, executive_id, payment_method } = req.query;
     const result = await salesService.getSales({
       executiveId: req.user.id,
       role: req.user.role,
       roleLevel: req.user.role_level,
-      course_id, payment_status, date_from, date_to, search,
+      course_id, payment_status, date_from, date_to, search, payment_method,
       filter_executive_id: executive_id,
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,

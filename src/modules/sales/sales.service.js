@@ -166,6 +166,10 @@ console.log('Manager params:', params);
     params.push(searchParam);
     idx++;
   }
+  if (payment_method) {
+    conditions.push(`EXISTS (SELECT 1 FROM payments p WHERE p.enrollment_id = e.id AND p.payment_method = $${idx++} AND p.approval_status = 'approved')`);
+    params.push(payment_method);
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const offset = (page - 1) * limit;
