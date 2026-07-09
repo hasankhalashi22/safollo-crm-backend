@@ -1,4 +1,5 @@
 const { query, withTransaction } = require('../../config/database');
+const { syncPaymentToAccounting } = require('../accounting/sync.service');
 
 const createSale = async (data, executiveId, paymentProofFile) => {
   const {
@@ -97,7 +98,7 @@ const createSale = async (data, executiveId, paymentProofFile) => {
   });
 };
 
-const addDuePayment = async (data, executiveId, paymentProofFile) => {
+const addDuePayment = async (data, executiveId, paymentProofFile, role) => {
   const { enrollment_id, amount, payment_method, transaction_id, due_date, notes, sender_number } = data;
 
   const enrollResult = await query(
@@ -137,19 +138,40 @@ const addDuePayment = async (data, executiveId, paymentProofFile) => {
   const paymentProofUrl = paymentProofFile?.path || null;
   const paymentProofPid = paymentProofFile?.filename || null;
 
+  const isSuperAdmin = role === 'super_admin';
+
   const paymentResult = await query(
     `INSERT INTO payments
        (enrollment_id, student_id, amount, payment_method,
         transaction_id, payment_proof_url, payment_proof_pid,
-        due_date, is_due_payment, executive_id, notes, sender_number)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, $11)
+        due_date, is_due_payment, executive_id, notes, sender_number, approval_status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, $11, $12)
      RETURNING *`,
     [
       enrollment_id, enrollment.student_id, amount, payment_method,
       transaction_id || null, paymentProofUrl, paymentProofPid,
-      due_date || null, executiveId, notes || null, sender_number || null
+      due_date || null, executiveId, notes || null, sender_number || null,
+      isSuperAdmin ? 'approved' : 'pending'
     ]
   );
+
+  const payment = paymentResult.rows[0];
+
+  if (isSuperAdmin) {
+    // enrollment total_collected আপডেট করো
+    await query(
+      `UPDATE enrollments SET
+         total_collected = total_collected + $1,
+         payment_status = CASE
+           WHEN total_collected + $1 >= course_price THEN 'paid'
+           ELSE 'partial'
+         END
+       WHERE id = $2`,
+      [amount, enrollment_id]
+    );
+    // Accounting sync
+    await syncPaymentToAccounting(payment, enrollment_id, executiveId);
+  }
 
   const updatedEnrollment = await query(
     'SELECT * FROM enrollments WHERE id = $1',
@@ -157,7 +179,7 @@ const addDuePayment = async (data, executiveId, paymentProofFile) => {
   );
 
   return {
-    payment: paymentResult.rows[0],
+    payment,
     enrollment: updatedEnrollment.rows[0],
   };
 };

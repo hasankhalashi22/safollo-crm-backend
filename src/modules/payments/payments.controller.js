@@ -3,7 +3,7 @@ const { query } = require('../../config/database');
 
 const addPayment = async (req, res, next) => {
   try {
-    const result = await addDuePayment(req.body, req.user.id, req.file || null);
+    const result = await addDuePayment(req.body, req.user.id, req.file || null, req.user.role);
     res.status(201).json({ success: true, data: result, message: 'পেমেন্ট রেকর্ড হয়েছে' });
   } catch (err) { next(err); }
 };
