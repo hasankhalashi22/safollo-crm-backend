@@ -115,4 +115,43 @@ const deletePaymentByAdmin = async (paymentId) => {
   });
 };
 
-module.exports = { addDuePayment, updatePaymentAmount, updatePaymentMethod, deletePaymentByAdmin };
+const updatePaymentDetails = async (paymentId, { payment_date, executive_id }, updatedBy) => {
+  return await withTransaction(async (client) => {
+    const paymentResult = await client.query(
+      `SELECT p.*, e.course_price, e.total_collected
+       FROM payments p
+       JOIN enrollments e ON e.id = p.enrollment_id
+       WHERE p.id = $1`,
+      [paymentId]
+    );
+    if (paymentResult.rows.length === 0) throw { statusCode: 404, message: 'Payment পাওয়া যায়নি' };
+
+    const payment = paymentResult.rows[0];
+
+    const fields = [];
+    const params = [];
+    let idx = 1;
+
+    if (payment_date) { fields.push(`created_at = $${idx++}`); params.push(payment_date); }
+    if (executive_id) { fields.push(`executive_id = $${idx++}`); params.push(executive_id); }
+
+    if (fields.length === 0) throw { statusCode: 400, message: 'কোনো পরিবর্তন নেই' };
+
+    params.push(paymentId);
+    await client.query(`UPDATE payments SET ${fields.join(', ')} WHERE id = $${idx}`, params);
+
+    if (payment.approval_status === 'approved') {
+      await removeSyncedTransaction(paymentId);
+      const updated = {
+        ...payment,
+        created_at: payment_date ? new Date(payment_date) : payment.created_at,
+        executive_id: executive_id || payment.executive_id,
+      };
+      await syncPaymentToAccounting(updated, payment.enrollment_id, updatedBy);
+    }
+
+    return { success: true };
+  });
+};
+
+module.exports = { addDuePayment, updatePaymentAmount, updatePaymentMethod, updatePaymentDetails, deletePaymentByAdmin };

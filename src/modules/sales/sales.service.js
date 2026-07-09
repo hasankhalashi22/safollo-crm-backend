@@ -24,12 +24,27 @@ const createSale = async (data, executiveId, paymentProofFile) => {
 
     let enrollment;
     const existingEnrollment = await client.query(
-      'SELECT * FROM enrollments WHERE student_id = $1 AND course_id = $2',
-      [student.id, course_id]
+      'SELECT * FROM enrollments WHERE student_id = $1 AND course_id = $2 AND batch_id = $3',
+      [student.id, course_id, batch_id || null]
     );
 
     if (existingEnrollment.rows.length > 0) {
       enrollment = existingEnrollment.rows[0];
+
+      if (enrollment.approval_status === 'pending') {
+        throw { statusCode: 400, message: 'এই candidate-এর এই course ও batch-এ ইতিমধ্যে একটি pending enrollment আছে। approval-এর অপেক্ষা করুন।' };
+      }
+
+      if (enrollment.approval_status === 'rejected') {
+        throw { statusCode: 400, message: 'এই candidate-এর এই course ও batch-এ একটি rejected enrollment আছে। নতুন entry না দিয়ে সেটি edit করে পুনরায় submit করুন।' };
+      }
+
+      if (enrollment.approval_status === 'approved') {
+        const due = parseFloat(enrollment.course_price) - parseFloat(enrollment.total_collected || 0);
+        if (due <= 0) {
+          throw { statusCode: 400, message: 'ক্যান্ডিডেট ইতোমধ্যে উল্লেখিত কোর্সে ভর্তি আছেন।' };
+        }
+      }
     } else {
       const enrollResult = await client.query(
         `INSERT INTO enrollments

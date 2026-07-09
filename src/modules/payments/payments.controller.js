@@ -1,4 +1,4 @@
-const { addDuePayment, updatePaymentAmount, updatePaymentMethod, deletePaymentByAdmin } = require('./payments.service');
+const { addDuePayment, updatePaymentAmount, updatePaymentMethod, updatePaymentDetails, deletePaymentByAdmin } = require('./payments.service');
 const { query } = require('../../config/database');
 
 const addPayment = async (req, res, next) => {
@@ -33,6 +33,14 @@ const updateMethod = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const updateDetails = async (req, res, next) => {
+  try {
+    const { payment_date, executive_id } = req.body;
+    const result = await updatePaymentDetails(req.params.id, { payment_date, executive_id }, req.user.id);
+    res.json({ success: true, ...result, message: 'Payment বিবরণ আপডেট হয়েছে' });
+  } catch (err) { next(err); }
+};
+
 const adminDeletePayment = async (req, res, next) => {
   try {
     await deletePaymentByAdmin(req.params.id);
@@ -40,4 +48,4 @@ const adminDeletePayment = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { addPayment, cancelPayment, updatePayment, updateMethod, adminDeletePayment };
+module.exports = { addPayment, cancelPayment, updatePayment, updateMethod, updateDetails, adminDeletePayment };
