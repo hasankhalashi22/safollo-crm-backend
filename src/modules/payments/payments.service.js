@@ -115,4 +115,4 @@ const deletePaymentByAdmin = async (paymentId) => {
   });
 };
 
-module.exports = { addDuePayment, updatePaymentAmount, deletePaymentByAdmin };
+module.exports = { addDuePayment, updatePaymentAmount, updatePaymentMethod, deletePaymentByAdmin };
