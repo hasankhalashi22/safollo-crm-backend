@@ -102,6 +102,14 @@ const addDuePayment = async (data, executiveId, paymentProofFile) => {
     throw { statusCode: 400, message: 'এই স্টুডেন্টের পেমেন্ট সম্পূর্ণ হয়ে গেছে' };
   }
 
+  const pendingCheck = await query(
+    `SELECT id FROM payments WHERE enrollment_id = $1 AND approval_status = 'pending'`,
+    [enrollment_id]
+  );
+  if (pendingCheck.rows.length > 0) {
+    throw { statusCode: 400, message: 'একটি পেমেন্ট approval-এর অপেক্ষায় আছে। সেটি approve/reject হওয়ার পর নতুন পেমেন্ট যোগ করুন।' };
+  }
+
   const remainingDue = enrollment.course_price - enrollment.total_collected;
   if (amount > remainingDue) {
     throw { statusCode: 400, message: `বাকি আছে মাত্র ৳${remainingDue}। এর বেশি নেওয়া যাবে না।` };
