@@ -43,14 +43,12 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
     const txnDate = payment.created_at ? payment.created_at.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
 
     if (payment.is_due_payment) {
-      // Due payment: Cash Dr, AR Cr + Deferred Income Dr, Revenue Cr
-      const deferredAccountId = await getAccountIdByName('Deferred Income');
-      if (!receivableAccountId || !deferredAccountId) {
-        console.error('Sync error: AR or Deferred Income account not found');
+      // Due payment: Cash Dr, AR Cr (clears AR)
+      if (!receivableAccountId) {
+        console.error('Sync error: AR account not found');
         return;
       }
       await withTransaction(async (client) => {
-        // Entry 1: Cash Dr, AR Cr
         const txn1 = await client.query(
           `INSERT INTO acc_transactions
              (transaction_date, transaction_type, description, amount,
@@ -67,24 +65,6 @@ const syncPaymentToAccounting = async (payment, enrollmentId, createdBy) => {
         await client.query(
           `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, $4)`,
           [txn1.rows[0].id, receivableAccountId, payment.amount, txnDate]
-        );
-        // Entry 2: Deferred Income Dr, Revenue Cr
-        const txn2 = await client.query(
-          `INSERT INTO acc_transactions
-             (transaction_date, transaction_type, description, amount,
-              debit_account_id, credit_account_id, source, payment_id,
-              enrollment_id, created_by)
-           VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7, $8)
-           RETURNING *`,
-          [txnDate, `বকেয়া রাজস্ব স্বীকৃতি`, payment.amount, deferredAccountId, revenueAccountId, payment.id, enrollmentId, createdBy]
-        );
-        await client.query(
-          `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'debit', $3, $4)`,
-          [txn2.rows[0].id, deferredAccountId, payment.amount, txnDate]
-        );
-        await client.query(
-          `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, $4)`,
-          [txn2.rows[0].id, revenueAccountId, payment.amount, txnDate]
         );
       });
     } else {
@@ -126,10 +106,10 @@ const syncReceivableOnApproval = async (enrollment, createdBy) => {
     const courseCheck = await query(`SELECT is_book FROM courses WHERE id = $1`, [enrollment.course_id]);
     const isBook = courseCheck.rows[0]?.is_book || false;
     const receivableAccountId = await getAccountIdByName('Accounts Receivable');
-    const deferredAccountId = await getAccountIdByName('Deferred Income');
+    const revenueAccountId = await getAccountIdByName(isBook ? 'Book Sales' : 'Course Sales');
 
-    if (!receivableAccountId || !deferredAccountId) {
-      console.error('Sync error: AR or Deferred Income account not found');
+    if (!receivableAccountId || !revenueAccountId) {
+      console.error('Sync error: AR or Revenue account not found');
       return;
     }
 
@@ -149,7 +129,7 @@ const syncReceivableOnApproval = async (enrollment, createdBy) => {
             debit_account_id, credit_account_id, source, enrollment_id, created_by)
          VALUES ($1, 'revenue', $2, $3, $4, $5, 'crm_sync', $6, $7)
          RETURNING *`,
-        [txnDate, `এনরোলমেন্ট বাকি — Accounts Receivable`, dueAmount, receivableAccountId, deferredAccountId, enrollment.id, createdBy]
+        [txnDate, `এনরোলমেন্ট বাকি — Accounts Receivable`, dueAmount, receivableAccountId, revenueAccountId, enrollment.id, createdBy]
       );
       const txn = txnResult.rows[0];
       await client.query(
@@ -158,7 +138,7 @@ const syncReceivableOnApproval = async (enrollment, createdBy) => {
       );
       await client.query(
         `INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, $4)`,
-        [txn.id, deferredAccountId, dueAmount, txnDate]
+        [txn.id, revenueAccountId, dueAmount, txnDate]
       );
     });
   } catch (err) {
