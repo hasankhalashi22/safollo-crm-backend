@@ -20,9 +20,9 @@ const createTransaction = async (req, res, next) => {
 
 const getTransactions = async (req, res, next) => {
   try {
-    const { date_from, date_to, transaction_type, account_id, page, limit } = req.query;
+    const { date_from, date_to, transaction_type, account_id, student_phone, page, limit } = req.query;
     const result = await transactionsService.getTransactions({
-      date_from, date_to, transaction_type, account_id,
+      date_from, date_to, transaction_type, account_id, student_phone,
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 50,
     });

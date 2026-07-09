@@ -49,7 +49,7 @@ const createTransaction = async (data, userId, proofFile) => {
   });
 };
 
-const getTransactions = async ({ date_from, date_to, transaction_type, account_id, page = 1, limit = 50 }) => {
+const getTransactions = async ({ date_from, date_to, transaction_type, account_id, student_phone, page = 1, limit = 50 }) => {
   const conditions = [];
   const params = [];
   let idx = 1;
@@ -58,6 +58,14 @@ const getTransactions = async ({ date_from, date_to, transaction_type, account_i
   if (date_to) { conditions.push(`t.transaction_date <= $${idx++}`); params.push(date_to); }
   if (transaction_type) { conditions.push(`t.transaction_type = $${idx++}`); params.push(transaction_type); }
   if (account_id) { conditions.push(`(t.debit_account_id = $${idx} OR t.credit_account_id = $${idx})`); params.push(account_id); idx++; }
+  if (student_phone) {
+    conditions.push(`t.enrollment_id IN (
+      SELECT e.id FROM enrollments e
+      JOIN students s ON s.id = e.student_id
+      WHERE s.phone LIKE $${idx++}
+    )`);
+    params.push(`%${student_phone}%`);
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const offset = (page - 1) * limit;
@@ -67,12 +75,16 @@ const getTransactions = async ({ date_from, date_to, transaction_type, account_i
             da.name as debit_account_name,
             ca.name as credit_account_name,
             u.phone as created_by_phone,
-            sp.full_name as created_by_name
+            sp.full_name as created_by_name,
+            s.full_name as student_name,
+            s.phone as student_phone
      FROM acc_transactions t
      LEFT JOIN acc_accounts da ON da.id = t.debit_account_id
      LEFT JOIN acc_accounts ca ON ca.id = t.credit_account_id
      LEFT JOIN users u ON u.id = t.created_by
      LEFT JOIN staff_profiles sp ON sp.user_id = u.id
+     LEFT JOIN enrollments e ON e.id = t.enrollment_id
+     LEFT JOIN students s ON s.id = e.student_id
      ${where}
      ORDER BY t.transaction_date DESC, t.created_at DESC
      LIMIT $${idx++} OFFSET $${idx++}`,
