@@ -611,7 +611,7 @@ const getCreditCardsOverview = async () => {
 };
 const getInvestorsOverview = async () => {
   const result = await query(
-    `SELECT id, name, investor_name, principal_amount, profit_rate, contract_start_date, contract_end_date, is_accruing
+    `SELECT id, name, investor_name, principal_amount, profit_rate, contract_start_date, contract_end_date, is_accruing, accrued_profit_override
      FROM acc_accounts
      WHERE account_subtype = 'investor_loan'
      ORDER BY code`
@@ -668,9 +668,11 @@ const getInvestorsOverview = async () => {
 
    let accruedProfit = 0;
     let daysAccrued = 0;
-    if (inv.is_accruing && accrualStart && inv.profit_rate && effectivePrincipal > 0) {
+    if (inv.accrued_profit_override !== null && inv.accrued_profit_override !== undefined) {
+      accruedProfit = parseFloat(inv.accrued_profit_override);
+    } else if (inv.is_accruing && accrualStart && inv.profit_rate && effectivePrincipal > 0) {
       const start = new Date(accrualStart);
-      const end = new Date(); // always accrue up to today while toggle is ON, regardless of contract_end_date
+      const end = new Date();
       daysAccrued = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
       accruedProfit = effectivePrincipal * (parseFloat(inv.profit_rate) / 100) * (daysAccrued / 365);
     }
@@ -852,6 +854,12 @@ const setOpeningBalance = async (id, amount, usdAmount, createdBy) => {
   return { success: true, message: 'Opening balance সেট হয়েছে' };
 };
 
+const setAccruedProfitOverride = async (id, amount) => {
+  const val = amount === null || amount === '' ? null : parseFloat(amount);
+  await query(`UPDATE acc_accounts SET accrued_profit_override = $1 WHERE id = $2 AND account_subtype = 'investor_loan'`, [val, id]);
+  return { success: true };
+};
+
 const deleteAccount = async (id) => {
   const txnCheck = await query(
     `SELECT COUNT(*) as count FROM acc_journal_entries WHERE account_id = $1`,
@@ -865,4 +873,4 @@ const deleteAccount = async (id) => {
   return { deleted: true };
 };
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, setOpeningBalance, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, setOpeningBalance, setAccruedProfitOverride, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };

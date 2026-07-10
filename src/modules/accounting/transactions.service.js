@@ -47,6 +47,14 @@ const createTransaction = async (data, userId, proofFile) => {
       [txn.id, credit_account_id, amount, transaction_date]
     );
 
+    // Investor payment: clear accrued_profit_override so auto-calculation resumes
+    if (transaction_type === 'investor_profit_payment') {
+      await client.query(
+        `UPDATE acc_accounts SET accrued_profit_override = NULL WHERE id = $1 AND account_subtype = 'investor_loan'`,
+        [debit_account_id]
+      );
+    }
+
     // USD outstanding update for credit card transactions
     if (usd_amount && parseFloat(usd_amount) > 0) {
       if (transaction_type === 'credit_card_charge') {

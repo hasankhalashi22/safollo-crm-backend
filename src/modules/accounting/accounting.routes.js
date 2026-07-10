@@ -31,6 +31,7 @@ router.post('/accounts', accountsController.createAccount);
 router.patch('/accounts/:id', accountsController.updateAccount);
 router.delete('/accounts/:id', accountsController.deleteAccount);
 router.post('/accounts/:id/opening-balance', accountsController.setOpeningBalance);
+router.post('/accounts/:id/accrued-profit-override', accountsController.setAccruedProfitOverride);
 router.get('/accounts/:id/balance', accountsController.getAccountBalance);
 router.get('/accounts/:id/ledger', accountsController.getLedger);
 router.get('/trial-balance', accountsController.getTrialBalance);

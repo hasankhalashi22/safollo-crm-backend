@@ -144,4 +144,13 @@ const setOpeningBalance = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, setOpeningBalance, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
+const setAccruedProfitOverride = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'super_admin') throw { statusCode: 403, message: 'শুধু super admin এটা করতে পারবেন' };
+    const { amount } = req.body;
+    await accountsService.setAccruedProfitOverride(req.params.id, amount ?? null);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, setOpeningBalance, setAccruedProfitOverride, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
