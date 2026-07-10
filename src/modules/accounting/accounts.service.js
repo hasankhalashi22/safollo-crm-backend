@@ -565,7 +565,7 @@ const getEquityStatement = async (dateFrom, dateTo) => {
   };
 };
 
-const getCreditCardsOverview = async (dateFrom, dateTo) => {
+const getCreditCardsOverview = async () => {
   const result = await query(
     `SELECT id, code, name, bank_name, credit_limit, interest_rate
      FROM acc_accounts
@@ -575,57 +575,28 @@ const getCreditCardsOverview = async (dateFrom, dateTo) => {
 
   const cards = [];
   for (const card of result.rows) {
-    // Total credit used (all time) = total credit entries (charges)
-    const totalUsedResult = await query(
-      `SELECT COALESCE(SUM(amount), 0) as total_used
-       FROM acc_journal_entries
-       WHERE account_id = $1 AND entry_type = 'credit'`,
-      [card.id]
-    );
-    const totalCreditUsed = parseFloat(totalUsedResult.rows[0].total_used) || 0;
-
-    // Total paid (all time) = total debit entries (payments)
-    const totalPaidResult = await query(
-      `SELECT COALESCE(SUM(amount), 0) as total_paid
-       FROM acc_journal_entries
-       WHERE account_id = $1 AND entry_type = 'debit'`,
-      [card.id]
-    );
-    const totalPaid = parseFloat(totalPaidResult.rows[0].total_paid) || 0;
-
-    // Outstanding balance (liability normal balance: credit - debit)
-    const outstandingBalance = totalCreditUsed - totalPaid;
-
-    // Period activity: charges (credit entries) and payments (debit entries)
-    const periodConditions = [`je.account_id = $1`];
-    const periodParams = [card.id];
-    let idx = 2;
-    if (dateFrom) { periodConditions.push(`je.entry_date >= $${idx++}`); periodParams.push(dateFrom); }
-    if (dateTo) { periodConditions.push(`je.entry_date <= $${idx++}`); periodParams.push(dateTo); }
-
-    const periodResult = await query(
+    const summaryResult = await query(
       `SELECT
-         COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) as total_charge,
-         COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) as total_payment
-       FROM acc_journal_entries je
-       WHERE ${periodConditions.join(' AND ')}`,
-      periodParams
+         COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) as total_used,
+         COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) as total_paid
+       FROM acc_journal_entries
+       WHERE account_id = $1`,
+      [card.id]
     );
-
-    const periodCharge = parseFloat(periodResult.rows[0].total_charge) || 0;
-    const periodPayment = parseFloat(periodResult.rows[0].total_payment) || 0;
+    const totalCreditUsed = parseFloat(summaryResult.rows[0].total_used) || 0;
+    const totalPaid = parseFloat(summaryResult.rows[0].total_paid) || 0;
+    const outstandingBalance = totalCreditUsed - totalPaid;
 
     cards.push({
       id: card.id,
       code: card.code,
       name: card.name,
       bank_name: card.bank_name,
+      credit_limit: parseFloat(card.credit_limit) || 0,
       interest_rate: card.interest_rate,
       total_credit_used: totalCreditUsed,
       total_paid: totalPaid,
       outstanding_balance: outstandingBalance,
-      period_charge: periodCharge,
-      period_payment: periodPayment,
     });
   }
 
@@ -633,9 +604,7 @@ const getCreditCardsOverview = async (dateFrom, dateTo) => {
     total_credit_used: acc.total_credit_used + c.total_credit_used,
     total_paid: acc.total_paid + c.total_paid,
     outstanding_balance: acc.outstanding_balance + c.outstanding_balance,
-    period_charge: acc.period_charge + c.period_charge,
-    period_payment: acc.period_payment + c.period_payment,
-  }), { total_credit_used: 0, total_paid: 0, outstanding_balance: 0, period_charge: 0, period_payment: 0 });
+  }), { total_credit_used: 0, total_paid: 0, outstanding_balance: 0 });
 
   return { cards, totals };
 };

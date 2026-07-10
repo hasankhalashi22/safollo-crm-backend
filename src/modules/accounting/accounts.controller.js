@@ -86,8 +86,7 @@ const getEquityStatement = async (req, res, next) => {
 
 const getCreditCardsOverview = async (req, res, next) => {
   try {
-    const { date_from, date_to } = req.query;
-    const result = await accountsService.getCreditCardsOverview(date_from, date_to);
+    const result = await accountsService.getCreditCardsOverview();
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 };
