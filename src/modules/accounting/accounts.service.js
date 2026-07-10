@@ -567,7 +567,7 @@ const getEquityStatement = async (dateFrom, dateTo) => {
 
 const getCreditCardsOverview = async () => {
   const result = await query(
-    `SELECT id, code, name, bank_name, credit_limit, interest_rate
+    `SELECT id, code, name, bank_name, credit_limit, interest_rate, usd_outstanding
      FROM acc_accounts
      WHERE is_active = TRUE AND account_subtype = 'credit_card'
      ORDER BY code`
@@ -597,6 +597,7 @@ const getCreditCardsOverview = async () => {
       total_credit_used: totalCreditUsed,
       total_paid: totalPaid,
       outstanding_balance: outstandingBalance,
+      usd_outstanding: parseFloat(card.usd_outstanding) || 0,
     });
   }
 
@@ -792,7 +793,7 @@ const getGeneralJournal = async (dateFrom, dateTo) => {
 };
 
 
-const setOpeningBalance = async (id, amount, createdBy) => {
+const setOpeningBalance = async (id, amount, usdAmount, createdBy) => {
   const accountResult = await query(`SELECT id, name, account_subtype FROM acc_accounts WHERE id = $1`, [id]);
   if (accountResult.rows.length === 0) throw { statusCode: 404, message: 'একাউন্ট পাওয়া যায়নি' };
   const account = accountResult.rows[0];
@@ -823,6 +824,10 @@ const setOpeningBalance = async (id, amount, createdBy) => {
       [txnIds]
     );
   }
+
+  // Set USD opening balance on account
+  const usdVal = parseFloat(usdAmount) || 0;
+  await query(`UPDATE acc_accounts SET usd_outstanding = $1 WHERE id = $2`, [usdVal, id]);
 
   if (amount <= 0) return { success: true, message: 'পুরনো ডাটা মুছে ফেলা হয়েছে' };
 

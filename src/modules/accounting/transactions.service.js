@@ -5,7 +5,8 @@ const createTransaction = async (data, userId, proofFile) => {
   const {
     transaction_date, transaction_type, description, amount,
     debit_account_id, credit_account_id,
-    reference_no, enrollment_id, employee_id, teacher_id, related_account_id
+    reference_no, enrollment_id, employee_id, teacher_id, related_account_id,
+    usd_amount
   } = data;
 
   if (!debit_account_id || !credit_account_id) {
@@ -44,6 +45,23 @@ const createTransaction = async (data, userId, proofFile) => {
        VALUES ($1, $2, 'credit', $3, $4)`,
       [txn.id, credit_account_id, amount, transaction_date]
     );
+
+    // USD outstanding update for credit card transactions
+    if (usd_amount && parseFloat(usd_amount) > 0) {
+      if (transaction_type === 'credit_card_charge') {
+        // Interest/charge: USD outstanding increases on credit account (the card)
+        await client.query(
+          `UPDATE acc_accounts SET usd_outstanding = COALESCE(usd_outstanding, 0) + $1 WHERE id = $2`,
+          [parseFloat(usd_amount), credit_account_id]
+        );
+      } else if (transaction_type === 'credit_card_payment') {
+        // Payment: USD outstanding decreases on debit account (the card)
+        await client.query(
+          `UPDATE acc_accounts SET usd_outstanding = GREATEST(COALESCE(usd_outstanding, 0) - $1, 0) WHERE id = $2`,
+          [parseFloat(usd_amount), debit_account_id]
+        );
+      }
+    }
 
     return txn;
   });

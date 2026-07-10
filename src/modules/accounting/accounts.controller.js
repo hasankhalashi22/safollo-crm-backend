@@ -137,9 +137,9 @@ const deleteAccount = async (req, res, next) => {
 const setOpeningBalance = async (req, res, next) => {
   try {
     if (req.user.role !== 'super_admin') throw { statusCode: 403, message: 'শুধু super admin এটা করতে পারবেন' };
-    const { amount } = req.body;
+    const { amount, usd_amount } = req.body;
     if (amount === undefined || amount === null) throw { statusCode: 400, message: 'Amount required' };
-    const result = await accountsService.setOpeningBalance(req.params.id, parseFloat(amount), req.user.id);
+    const result = await accountsService.setOpeningBalance(req.params.id, parseFloat(amount), usd_amount, req.user.id);
     res.json({ success: true, message: result.message });
   } catch (err) { next(err); }
 };
