@@ -127,4 +127,12 @@ const getGeneralJournal = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
+const deleteAccount = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'super_admin') throw { statusCode: 403, message: 'শুধু super admin একাউন্ট মুছতে পারবেন' };
+    const result = await accountsService.deleteAccount(req.params.id);
+    res.json({ success: true, data: result, message: 'একাউন্ট মুছে ফেলা হয়েছে' });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };

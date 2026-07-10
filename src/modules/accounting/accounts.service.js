@@ -823,4 +823,17 @@ const getGeneralJournal = async (dateFrom, dateTo) => {
 };
 
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
+const deleteAccount = async (id) => {
+  const txnCheck = await query(
+    `SELECT COUNT(*) as count FROM acc_journal_entries WHERE account_id = $1`,
+    [id]
+  );
+  if (parseInt(txnCheck.rows[0].count) > 0) {
+    throw { statusCode: 400, message: 'এই একাউন্টে ট্রানজেকশন আছে। ট্রানজেকশন থাকলে একাউন্ট মুছে ফেলা যাবে না।' };
+  }
+  const result = await query(`DELETE FROM acc_accounts WHERE id = $1 RETURNING id`, [id]);
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'একাউন্ট পাওয়া যায়নি' };
+  return { deleted: true };
+};
+
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
