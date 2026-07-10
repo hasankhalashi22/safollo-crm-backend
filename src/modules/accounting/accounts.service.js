@@ -613,7 +613,7 @@ const getInvestorsOverview = async () => {
   const result = await query(
     `SELECT id, name, investor_name, principal_amount, profit_rate, contract_start_date, contract_end_date, is_accruing
      FROM acc_accounts
-     WHERE is_active = TRUE AND account_subtype = 'investor_loan'
+     WHERE account_subtype = 'investor_loan'
      ORDER BY code`
   );
 
@@ -658,23 +658,28 @@ const getInvestorsOverview = async () => {
     );
     const totalRepaid = parseFloat(repaidResult.rows[0].total_repaid) || 0;
 
+    // If no journal entries exist, fall back to principal_amount from account setup
+    const principalFromAccount = parseFloat(inv.principal_amount) || 0;
+    const effectiveInitialInvestment = totalDeposit > 0 ? totalDeposit : principalFromAccount;
+    const effectivePrincipal = totalDeposit > 0 ? currentPrincipal : Math.max(0, principalFromAccount - totalRepaid);
+
     // Accrual start date = last payment date, or contract start date, or account creation
     const accrualStart = lastPaymentDate || inv.contract_start_date;
 
    let accruedProfit = 0;
     let daysAccrued = 0;
-    if (inv.is_accruing && accrualStart && inv.profit_rate && currentPrincipal > 0) {
+    if (inv.is_accruing && accrualStart && inv.profit_rate && effectivePrincipal > 0) {
       const start = new Date(accrualStart);
       const end = new Date(); // always accrue up to today while toggle is ON, regardless of contract_end_date
       daysAccrued = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
-      accruedProfit = currentPrincipal * (parseFloat(inv.profit_rate) / 100) * (daysAccrued / 365);
+      accruedProfit = effectivePrincipal * (parseFloat(inv.profit_rate) / 100) * (daysAccrued / 365);
     }
 
    investors.push({
       id: inv.id,
       name: inv.name,
       investor_name: inv.investor_name,
-      principal: currentPrincipal,
+      principal: effectivePrincipal,
       profit_rate: inv.profit_rate,
       contract_start_date: inv.contract_start_date,
       contract_end_date: inv.contract_end_date,
@@ -683,7 +688,7 @@ const getInvestorsOverview = async () => {
       accrued_profit: Math.round(accruedProfit * 100) / 100,
       total_profit_paid: totalPaid,
       is_accruing: inv.is_accruing,
-      initial_investment: totalDeposit,
+      initial_investment: effectiveInitialInvestment,
       total_principal_repaid: totalRepaid,
     });
   }
