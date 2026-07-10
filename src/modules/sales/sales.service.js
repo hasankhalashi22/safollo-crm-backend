@@ -40,11 +40,8 @@ const createSale = async (data, executiveId, paymentProofFile) => {
         throw { statusCode: 400, message: 'এই candidate-এর এই course ও batch-এ একটি rejected enrollment আছে। নতুন entry না দিয়ে সেটি edit করে পুনরায় submit করুন।' };
       }
 
-      if (enrollment.approval_status === 'approved') {
-        const due = parseFloat(enrollment.course_price) - parseFloat(enrollment.total_collected || 0);
-        if (due <= 0) {
-          throw { statusCode: 400, message: 'ক্যান্ডিডেট ইতোমধ্যে উল্লেখিত কোর্সে ভর্তি আছেন।' };
-        }
+      if (enrollment.approval_status === 'pending' || enrollment.approval_status === 'approved') {
+        throw { statusCode: 400, message: 'এই ছাত্র ইতোমধ্যে এই কোর্স ও ব্যাচে ভর্তি আছেন। বকেয়া পেমেন্ট নিতে বকেয়া তালিকা ব্যবহার করুন।' };
       }
     } else {
       const enrollResult = await client.query(
