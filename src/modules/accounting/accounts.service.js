@@ -802,7 +802,7 @@ const setOpeningBalance = async (id, amount, usdAmount, createdBy) => {
   const accountResult = await query(`SELECT id, name, account_subtype FROM acc_accounts WHERE id = $1`, [id]);
   if (accountResult.rows.length === 0) throw { statusCode: 404, message: 'একাউন্ট পাওয়া যায়নি' };
   const account = accountResult.rows[0];
-  if (account.account_subtype !== 'credit_card') throw { statusCode: 400, message: 'শুধু credit card একাউন্টে opening balance সেট করা যাবে' };
+  if (!['credit_card', 'investor_loan'].includes(account.account_subtype)) throw { statusCode: 400, message: 'শুধু credit card বা investor loan একাউন্টে opening balance সেট করা যাবে' };
 
   // Find or create Opening Balance Equity account
   let equityResult = await query(`SELECT id FROM acc_accounts WHERE account_type = 'equity' AND name ILIKE '%opening%' LIMIT 1`);
@@ -830,13 +830,15 @@ const setOpeningBalance = async (id, amount, usdAmount, createdBy) => {
     );
   }
 
-  // Set USD opening balance on account
-  const usdVal = parseFloat(usdAmount) || 0;
-  await query(`UPDATE acc_accounts SET usd_outstanding = $1 WHERE id = $2`, [usdVal, id]);
+  // For credit_card: also set USD outstanding
+  if (account.account_subtype === 'credit_card') {
+    const usdVal = parseFloat(usdAmount) || 0;
+    await query(`UPDATE acc_accounts SET usd_outstanding = $1 WHERE id = $2`, [usdVal, id]);
+  }
 
   if (amount <= 0) return { success: true, message: 'পুরনো ডাটা মুছে ফেলা হয়েছে' };
 
-  // Create opening balance transaction: DR Opening Balance Equity, CR Credit Card
+  // Both credit_card and investor_loan are liabilities: DR Opening Balance Equity, CR Account
   const txnResult = await query(
     `INSERT INTO acc_transactions (transaction_date, transaction_type, description, amount, debit_account_id, credit_account_id, source, created_by)
      VALUES (CURRENT_DATE, 'opening_balance', $1, $2, $3, $4, 'manual', $5) RETURNING id`,
