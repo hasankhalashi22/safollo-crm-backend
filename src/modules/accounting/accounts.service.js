@@ -800,11 +800,14 @@ const getGeneralJournal = async (dateFrom, dateTo) => {
 };
 
 
-const setOpeningBalance = async (id, amount, usdAmount, createdBy) => {
+const setOpeningBalance = async (id, amount, usdAmount, createdBy, date) => {
   const accountResult = await query(`SELECT id, name, account_subtype FROM acc_accounts WHERE id = $1`, [id]);
   if (accountResult.rows.length === 0) throw { statusCode: 404, message: 'একাউন্ট পাওয়া যায়নি' };
   const account = accountResult.rows[0];
-  if (!['credit_card', 'investor_loan'].includes(account.account_subtype)) throw { statusCode: 400, message: 'শুধু credit card বা investor loan একাউন্টে opening balance সেট করা যাবে' };
+  const allowedSubtypes = ['credit_card', 'investor_loan', 'bank', 'mobile_wallet', 'cash'];
+  if (account.account_subtype && !allowedSubtypes.includes(account.account_subtype)) {
+    throw { statusCode: 400, message: 'এই ধরনের একাউন্টে opening balance সেট করা যাবে না' };
+  }
 
   // Find or create Opening Balance Equity account
   let equityResult = await query(`SELECT id FROM acc_accounts WHERE account_type = 'equity' AND name ILIKE '%opening%' LIMIT 1`);
@@ -840,16 +843,23 @@ const setOpeningBalance = async (id, amount, usdAmount, createdBy) => {
 
   if (amount <= 0) return { success: true, message: 'পুরনো ডাটা মুছে ফেলা হয়েছে' };
 
-  // Both credit_card and investor_loan are liabilities: DR Opening Balance Equity, CR Account
+  const txnDate = date || new Date().toISOString().split('T')[0];
+
+  // Assets (bank, wallet, cash): DR Account, CR Opening Balance Equity
+  // Liabilities (credit_card, investor_loan): DR Opening Balance Equity, CR Account
+  const isAsset = ['bank', 'mobile_wallet', 'cash'].includes(account.account_subtype);
+  const debitId = isAsset ? id : equityAccountId;
+  const creditId = isAsset ? equityAccountId : id;
+
   const txnResult = await query(
     `INSERT INTO acc_transactions (transaction_date, transaction_type, description, amount, debit_account_id, credit_account_id, source, created_by)
-     VALUES (CURRENT_DATE, 'opening_balance', $1, $2, $3, $4, 'manual', $5) RETURNING id`,
-    [`${account.name} — Opening Balance`, amount, equityAccountId, id, createdBy]
+     VALUES ($1, 'opening_balance', $2, $3, $4, $5, 'manual', $6) RETURNING id`,
+    [txnDate, `${account.name} — Opening Balance`, amount, debitId, creditId, createdBy]
   );
   const txnId = txnResult.rows[0].id;
 
-  await query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'debit', $3, CURRENT_DATE)`, [txnId, equityAccountId, amount]);
-  await query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, CURRENT_DATE)`, [txnId, id, amount]);
+  await query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'debit', $3, $4)`, [txnId, debitId, amount, txnDate]);
+  await query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, $4)`, [txnId, creditId, amount, txnDate]);
 
   return { success: true, message: 'Opening balance সেট হয়েছে' };
 };
