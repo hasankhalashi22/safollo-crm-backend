@@ -24,13 +24,14 @@ const createTransaction = async (data, userId, proofFile) => {
       `INSERT INTO acc_transactions
          (transaction_date, transaction_type, description, amount,
           debit_account_id, credit_account_id, proof_url, proof_type,
-          reference_no, enrollment_id, employee_id, teacher_id, created_by, related_account_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          reference_no, enrollment_id, employee_id, teacher_id, created_by, related_account_id, usd_amount)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
       [transaction_date, transaction_type, description || null, amount,
        debit_account_id, credit_account_id, proofUrl, proofType,
        reference_no || null, enrollment_id || null, employee_id || null,
-       teacher_id || null, userId, related_account_id || null]
+       teacher_id || null, userId, related_account_id || null,
+       (usd_amount && parseFloat(usd_amount) > 0) ? parseFloat(usd_amount) : null]
     );
     const txn = txnResult.rows[0];
 
@@ -118,9 +119,31 @@ const getTransactions = async ({ date_from, date_to, transaction_type, account_i
 };
 
 const deleteTransaction = async (id) => {
+  const txnResult = await query(
+    `SELECT transaction_type, debit_account_id, credit_account_id, usd_amount FROM acc_transactions WHERE id = $1`,
+    [id]
+  );
+  if (txnResult.rows.length === 0) throw { statusCode: 404, message: 'ট্রানজেকশন পাওয়া যায়নি' };
+  const txn = txnResult.rows[0];
+
   await query('DELETE FROM acc_journal_entries WHERE transaction_id = $1', [id]);
-  const result = await query('DELETE FROM acc_transactions WHERE id = $1 RETURNING id', [id]);
-  if (result.rows.length === 0) throw { statusCode: 404, message: 'ট্রানজেকশন পাওয়া যায়নি' };
+  await query('DELETE FROM acc_transactions WHERE id = $1', [id]);
+
+  // Reverse usd_outstanding if applicable
+  if (txn.usd_amount && parseFloat(txn.usd_amount) > 0) {
+    if (txn.transaction_type === 'credit_card_charge') {
+      await query(
+        `UPDATE acc_accounts SET usd_outstanding = GREATEST(COALESCE(usd_outstanding, 0) - $1, 0) WHERE id = $2`,
+        [parseFloat(txn.usd_amount), txn.credit_account_id]
+      );
+    } else if (txn.transaction_type === 'credit_card_payment') {
+      await query(
+        `UPDATE acc_accounts SET usd_outstanding = COALESCE(usd_outstanding, 0) + $1 WHERE id = $2`,
+        [parseFloat(txn.usd_amount), txn.debit_account_id]
+      );
+    }
+  }
+
   return { deleted: true };
 };
 
