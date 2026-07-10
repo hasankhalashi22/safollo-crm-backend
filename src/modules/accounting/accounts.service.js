@@ -101,18 +101,18 @@ const updateAccount = async (id, data) => {
 };
 
 const getAccountBalance = async (accountId) => {
+  const accountResult = await query('SELECT account_type, opening_balance_date FROM acc_accounts WHERE id = $1', [accountId]);
+  const accountType = accountResult.rows[0]?.account_type;
+  const openingDate = accountResult.rows[0]?.opening_balance_date;
+
   const result = await query(
     `SELECT
        COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) as total_debit,
        COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) as total_credit
      FROM acc_journal_entries
-     WHERE account_id = $1`,
+     WHERE account_id = $1 ${openingDate ? `AND entry_date >= '${openingDate}'` : ''}`,
     [accountId]
   );
-  const { total_debit, total_credit } = result.rows[0];
-
-  const accountResult = await query('SELECT account_type FROM acc_accounts WHERE id = $1', [accountId]);
-  const accountType = accountResult.rows[0]?.account_type;
 
   let balance;
   if (['asset', 'expense'].includes(accountType)) {
@@ -199,7 +199,9 @@ const getTrialBalance = async (asOfDate) => {
        COALESCE(SUM(CASE WHEN je.entry_type = 'debit' THEN je.amount ELSE 0 END), 0) as total_debit,
        COALESCE(SUM(CASE WHEN je.entry_type = 'credit' THEN je.amount ELSE 0 END), 0) as total_credit
      FROM acc_accounts a
-     LEFT JOIN acc_journal_entries je ON je.account_id = a.id ${asOfDate ? `AND je.entry_date <= $1` : ''}
+     LEFT JOIN acc_journal_entries je ON je.account_id = a.id
+       ${asOfDate ? `AND je.entry_date <= $1` : ''}
+       AND (a.opening_balance_date IS NULL OR je.entry_date >= a.opening_balance_date)
      WHERE a.is_active = TRUE
      GROUP BY a.id, a.code, a.name, a.account_type
      ORDER BY a.code`,
@@ -567,7 +569,7 @@ const getEquityStatement = async (dateFrom, dateTo) => {
 
 const getCreditCardsOverview = async () => {
   const result = await query(
-    `SELECT id, code, name, bank_name, credit_limit, interest_rate, usd_outstanding
+    `SELECT id, code, name, bank_name, credit_limit, interest_rate, usd_outstanding, opening_balance_date
      FROM acc_accounts
      WHERE is_active = TRUE AND account_subtype = 'credit_card'
      ORDER BY code`
@@ -575,12 +577,13 @@ const getCreditCardsOverview = async () => {
 
   const cards = [];
   for (const card of result.rows) {
+    const cutoff = card.opening_balance_date ? `AND entry_date >= '${card.opening_balance_date}'` : '';
     const summaryResult = await query(
       `SELECT
          COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) as total_used,
          COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) as total_paid
        FROM acc_journal_entries
-       WHERE account_id = $1`,
+       WHERE account_id = $1 ${cutoff}`,
       [card.id]
     );
     const totalCreditUsed = parseFloat(summaryResult.rows[0].total_used) || 0;
@@ -611,7 +614,7 @@ const getCreditCardsOverview = async () => {
 };
 const getInvestorsOverview = async () => {
   const result = await query(
-    `SELECT id, name, investor_name, principal_amount, profit_rate, contract_start_date, contract_end_date, is_accruing, accrued_profit_override
+    `SELECT id, name, investor_name, principal_amount, profit_rate, contract_start_date, contract_end_date, is_accruing, accrued_profit_override, opening_balance_date
      FROM acc_accounts
      WHERE account_subtype = 'investor_loan'
      ORDER BY code`
@@ -620,12 +623,13 @@ const getInvestorsOverview = async () => {
   const investors = [];
   for (const inv of result.rows) {
     // Current principal balance (liability: credit - debit)
+    const invCutoff = inv.opening_balance_date ? `AND entry_date >= '${inv.opening_balance_date}'` : '';
     const balanceResult = await query(
       `SELECT
          COALESCE(SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END), 0) -
          COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END), 0) as balance
        FROM acc_journal_entries
-       WHERE account_id = $1`,
+       WHERE account_id = $1 ${invCutoff}`,
       [inv.id]
     );
     const currentPrincipal = parseFloat(balanceResult.rows[0].balance) || 0;
@@ -644,16 +648,16 @@ const getInvestorsOverview = async () => {
     const depositResult = await query(
       `SELECT COALESCE(SUM(amount), 0) as total_deposit
        FROM acc_journal_entries
-       WHERE account_id = $1 AND entry_type = 'credit'`,
+       WHERE account_id = $1 AND entry_type = 'credit' ${invCutoff}`,
       [inv.id]
     );
     const totalDeposit = parseFloat(depositResult.rows[0].total_deposit) || 0;
 
-    // Total principal repaid (debit entries via Cash Out, excluding profit payments which don't touch this account)
+    // Total principal repaid (debit entries via Cash Out)
     const repaidResult = await query(
       `SELECT COALESCE(SUM(amount), 0) as total_repaid
        FROM acc_journal_entries
-       WHERE account_id = $1 AND entry_type = 'debit'`,
+       WHERE account_id = $1 AND entry_type = 'debit' ${invCutoff}`,
       [inv.id]
     );
     const totalRepaid = parseFloat(repaidResult.rows[0].total_repaid) || 0;
@@ -841,9 +845,11 @@ const setOpeningBalance = async (id, amount, usdAmount, createdBy, date) => {
     await query(`UPDATE acc_accounts SET usd_outstanding = $1 WHERE id = $2`, [usdVal, id]);
   }
 
-  if (amount <= 0) return { success: true, message: 'পুরনো ডাটা মুছে ফেলা হয়েছে' };
-
+  // Save opening_balance_date for cutoff calculation
   const txnDate = date || new Date().toISOString().split('T')[0];
+  await query(`UPDATE acc_accounts SET opening_balance_date = $1 WHERE id = $2`, [txnDate, id]);
+
+  if (amount <= 0) return { success: true, message: 'পুরনো ডাটা মুছে ফেলা হয়েছে' };
 
   // Assets (bank, wallet, cash): DR Account, CR Opening Balance Equity
   // Liabilities (credit_card, investor_loan): DR Opening Balance Equity, CR Account
