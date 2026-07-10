@@ -134,4 +134,14 @@ const deleteAccount = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
+const setOpeningBalance = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'super_admin') throw { statusCode: 403, message: 'শুধু super admin এটা করতে পারবেন' };
+    const { amount } = req.body;
+    if (amount === undefined || amount === null) throw { statusCode: 400, message: 'Amount required' };
+    const result = await accountsService.setOpeningBalance(req.params.id, parseFloat(amount), req.user.id);
+    res.json({ success: true, message: result.message });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, setOpeningBalance, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };

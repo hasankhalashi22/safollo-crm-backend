@@ -792,6 +792,54 @@ const getGeneralJournal = async (dateFrom, dateTo) => {
 };
 
 
+const setOpeningBalance = async (id, amount, createdBy) => {
+  const accountResult = await query(`SELECT id, name, account_subtype FROM acc_accounts WHERE id = $1`, [id]);
+  if (accountResult.rows.length === 0) throw { statusCode: 404, message: 'একাউন্ট পাওয়া যায়নি' };
+  const account = accountResult.rows[0];
+  if (account.account_subtype !== 'credit_card') throw { statusCode: 400, message: 'শুধু credit card একাউন্টে opening balance সেট করা যাবে' };
+
+  // Find or create Opening Balance Equity account
+  let equityResult = await query(`SELECT id FROM acc_accounts WHERE account_type = 'equity' AND name ILIKE '%opening%' LIMIT 1`);
+  let equityAccountId;
+  if (equityResult.rows.length === 0) {
+    const created = await query(
+      `INSERT INTO acc_accounts (name, account_type, account_subtype, is_active) VALUES ('Opening Balance Equity', 'equity', null, true) RETURNING id`
+    );
+    equityAccountId = created.rows[0].id;
+  } else {
+    equityAccountId = equityResult.rows[0].id;
+  }
+
+  // Delete existing journal entries and their orphaned transactions for this account
+  const jeResult = await query(`SELECT DISTINCT transaction_id FROM acc_journal_entries WHERE account_id = $1`, [id]);
+  const txnIds = jeResult.rows.map(r => r.transaction_id);
+
+  await query(`DELETE FROM acc_journal_entries WHERE account_id = $1`, [id]);
+
+  // Delete transactions that now have no journal entries
+  if (txnIds.length > 0) {
+    await query(
+      `DELETE FROM acc_transactions WHERE id = ANY($1) AND id NOT IN (SELECT DISTINCT transaction_id FROM acc_journal_entries)`,
+      [txnIds]
+    );
+  }
+
+  if (amount <= 0) return { success: true, message: 'পুরনো ডাটা মুছে ফেলা হয়েছে' };
+
+  // Create opening balance transaction: DR Opening Balance Equity, CR Credit Card
+  const txnResult = await query(
+    `INSERT INTO acc_transactions (transaction_date, transaction_type, description, amount, debit_account_id, credit_account_id, source, created_by)
+     VALUES (CURRENT_DATE, 'opening_balance', $1, $2, $3, $4, 'manual', $5) RETURNING id`,
+    [`${account.name} — Opening Balance`, amount, equityAccountId, id, createdBy]
+  );
+  const txnId = txnResult.rows[0].id;
+
+  await query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'debit', $3, CURRENT_DATE)`, [txnId, equityAccountId, amount]);
+  await query(`INSERT INTO acc_journal_entries (transaction_id, account_id, entry_type, amount, entry_date) VALUES ($1, $2, 'credit', $3, CURRENT_DATE)`, [txnId, id, amount]);
+
+  return { success: true, message: 'Opening balance সেট হয়েছে' };
+};
+
 const deleteAccount = async (id) => {
   const txnCheck = await query(
     `SELECT COUNT(*) as count FROM acc_journal_entries WHERE account_id = $1`,
@@ -805,4 +853,4 @@ const deleteAccount = async (id) => {
   return { deleted: true };
 };
 
-module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };
+module.exports = { getAccounts, getAllAccounts, createAccount, updateAccount, deleteAccount, setOpeningBalance, getAccountBalance, getLedger, getTrialBalance, getIncomeStatement, getBalanceSheet, getCashFlowStatement, getEquityStatement, getCreditCardsOverview, getInvestorsOverview, toggleInvestorAccrual, getInvestorHistory, getShareholdersOverview, getGeneralJournal };

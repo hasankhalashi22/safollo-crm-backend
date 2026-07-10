@@ -30,6 +30,7 @@ router.get('/accounts/all', accountsController.getAllAccounts);
 router.post('/accounts', accountsController.createAccount);
 router.patch('/accounts/:id', accountsController.updateAccount);
 router.delete('/accounts/:id', accountsController.deleteAccount);
+router.post('/accounts/:id/opening-balance', accountsController.setOpeningBalance);
 router.get('/accounts/:id/balance', accountsController.getAccountBalance);
 router.get('/accounts/:id/ledger', accountsController.getLedger);
 router.get('/trial-balance', accountsController.getTrialBalance);
