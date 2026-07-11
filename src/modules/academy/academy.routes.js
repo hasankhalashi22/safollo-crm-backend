@@ -43,6 +43,10 @@ router.put('/subjects/:id', c.updateSubject);
 router.delete('/subjects/:id', c.deleteSubject);
 router.put('/subjects/:subjectId/lectures', c.saveLectures);
 
+// Excel import
+router.post('/plans/:planId/import-excel', c.importPlanExcel);
+router.post('/subjects/:subjectId/import-excel', c.importSubjectExcel);
+
 // Batches
 router.get('/batches', c.getBatches);
 router.post('/batches', c.createBatch);

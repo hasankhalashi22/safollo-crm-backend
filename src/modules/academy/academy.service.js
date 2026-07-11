@@ -1,4 +1,5 @@
 const { query } = require('../../config/database');
+const XLSX = require('xlsx');
 
 // ── Zoom Accounts ─────────────────────────────────────────────────────────────
 const getZoomAccounts = async () => {
@@ -527,6 +528,58 @@ const getScheduleReport = async ({ teacher_id, batch_id, status, month, row_type
   return r.rows;
 };
 
+// ── Excel Import ──────────────────────────────────────────────────────────────
+const importPlanExcel = async (planId, buffer) => {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const results = [];
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // First row is header — skip it
+    const dataRows = rows.slice(1).filter(r => r[0] || r[1]);
+    if (!dataRows.length) continue;
+
+    // Create subject with sheet name
+    const subject = await createSubject(planId, { subject_name: sheetName });
+
+    // Insert lectures
+    for (let i = 0; i < dataRows.length; i++) {
+      const [title, details] = dataRows[i];
+      if (!String(title || '').trim()) continue;
+      await query(
+        `INSERT INTO academy_plan_lectures (subject_id, serial_no, lecture_no, title, details)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [subject.id, i + 1, i + 1, String(title).trim(), String(details || '').trim() || null]
+      );
+    }
+    results.push({ subject: sheetName, lectures: dataRows.length });
+  }
+  return { imported: results.length, details: results };
+};
+
+const importSubjectExcel = async (subjectId, buffer) => {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  // First row is header — skip it
+  const dataRows = rows.slice(1).filter(r => r[0] || r[1]);
+
+  await query(`DELETE FROM academy_plan_lectures WHERE subject_id=$1`, [subjectId]);
+  for (let i = 0; i < dataRows.length; i++) {
+    const [title, details] = dataRows[i];
+    if (!String(title || '').trim()) continue;
+    await query(
+      `INSERT INTO academy_plan_lectures (subject_id, serial_no, lecture_no, title, details)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [subjectId, i + 1, i + 1, String(title).trim(), String(details || '').trim() || null]
+    );
+  }
+  return { imported: dataRows.length };
+};
+
 module.exports = {
   getZoomAccounts, createZoomAccount, updateZoomAccount, deleteZoomAccount,
   getPaymentRates, upsertPaymentRate, deletePaymentRate,
@@ -540,4 +593,5 @@ module.exports = {
   submitFeedback, getPendingFeedbacks, approveFeedback,
   getTeacherPayments, payTeacher,
   getScheduleReport,
+  importPlanExcel, importSubjectExcel,
 };

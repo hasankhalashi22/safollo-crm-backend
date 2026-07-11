@@ -66,3 +66,24 @@ exports.payTeacher         = wrap(async (req) => { superAdminOnly(req); return s
 
 // Reports
 exports.getScheduleReport = wrap(async (req) => svc.getScheduleReport(req.query));
+
+// Excel Import
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+exports.importPlanExcel = [
+  upload.single('file'),
+  wrap(async (req) => {
+    superAdminOnly(req);
+    if (!req.file) throw { statusCode: 400, message: 'ফাইল দিন' };
+    return svc.importPlanExcel(req.params.planId, req.file.buffer);
+  }),
+];
+exports.importSubjectExcel = [
+  upload.single('file'),
+  wrap(async (req) => {
+    superAdminOnly(req);
+    if (!req.file) throw { statusCode: 400, message: 'ফাইল দিন' };
+    return svc.importSubjectExcel(req.params.subjectId, req.file.buffer);
+  }),
+];
