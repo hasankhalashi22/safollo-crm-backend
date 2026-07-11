@@ -30,16 +30,16 @@ const deleteZoomAccount = async (id) => {
 
 // ── Payment Rates ─────────────────────────────────────────────────────────────
 const getPaymentRates = async () => {
-  const r = await query(`SELECT * FROM academy_payment_rates ORDER BY teacher_type, class_type`);
+  const r = await query(`SELECT * FROM academy_payment_rates ORDER BY course_type, class_mode, teacher_category`);
   return r.rows;
 };
-const upsertPaymentRate = async ({ teacher_type, class_type, rate_per_class }) => {
+const upsertPaymentRate = async ({ course_type, class_mode, teacher_category, rate_per_class }) => {
   const r = await query(
-    `INSERT INTO academy_payment_rates (teacher_type, class_type, rate_per_class)
-     VALUES ($1,$2,$3)
-     ON CONFLICT (teacher_type, class_type) DO UPDATE SET rate_per_class=$3, updated_at=NOW()
+    `INSERT INTO academy_payment_rates (course_type, class_mode, teacher_category, rate_per_class)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (course_type, class_mode, teacher_category) DO UPDATE SET rate_per_class=$4, updated_at=NOW()
      RETURNING *`,
-    [teacher_type, class_type, rate_per_class]
+    [course_type, class_mode, teacher_category, rate_per_class]
   );
   return r.rows[0];
 };
