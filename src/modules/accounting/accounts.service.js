@@ -825,18 +825,18 @@ const setOpeningBalance = async (id, amount, usdAmount, createdBy, date) => {
     equityAccountId = equityResult.rows[0].id;
   }
 
-  // Delete existing journal entries and their orphaned transactions for this account
-  const jeResult = await query(`SELECT DISTINCT transaction_id FROM acc_journal_entries WHERE account_id = $1`, [id]);
+  // Delete only existing opening_balance journal entries for this account
+  const jeResult = await query(
+    `SELECT DISTINCT je.transaction_id FROM acc_journal_entries je
+     JOIN acc_transactions t ON t.id = je.transaction_id
+     WHERE je.account_id = $1 AND t.transaction_type = 'opening_balance'`,
+    [id]
+  );
   const txnIds = jeResult.rows.map(r => r.transaction_id);
 
-  await query(`DELETE FROM acc_journal_entries WHERE account_id = $1`, [id]);
-
-  // Delete transactions that now have no journal entries
   if (txnIds.length > 0) {
-    await query(
-      `DELETE FROM acc_transactions WHERE id = ANY($1) AND id NOT IN (SELECT DISTINCT transaction_id FROM acc_journal_entries)`,
-      [txnIds]
-    );
+    await query(`DELETE FROM acc_journal_entries WHERE transaction_id = ANY($1)`, [txnIds]);
+    await query(`DELETE FROM acc_transactions WHERE id = ANY($1)`, [txnIds]);
   }
 
   // For credit_card: also set USD outstanding

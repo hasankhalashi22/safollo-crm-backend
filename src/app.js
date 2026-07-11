@@ -82,6 +82,7 @@ app.use('/api/hr', hrRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/academy', require('./modules/academy/academy.routes'));
 
 // ── Error handling ────────────────────────────────────────
 app.use(notFound);
