@@ -253,11 +253,11 @@ const importSubject = async (planId, sourceSubjectId) => {
 const saveLectures = async (subjectId, lectures) => {
   await query(`DELETE FROM academy_plan_lectures WHERE subject_id=$1`, [subjectId]);
   for (let i = 0; i < lectures.length; i++) {
-    const { title, duration_min, is_practical } = lectures[i];
+    const { title, details } = lectures[i];
     await query(
-      `INSERT INTO academy_plan_lectures (subject_id, serial_no, lecture_no, title, duration_min, is_practical)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [subjectId, i + 1, i + 1, title, duration_min || 60, is_practical || false]
+      `INSERT INTO academy_plan_lectures (subject_id, serial_no, lecture_no, title, details)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [subjectId, i + 1, i + 1, title, details || null]
     );
   }
   return { saved: lectures.length };
