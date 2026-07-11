@@ -1,8 +1,8 @@
 const router = require('express').Router();
-const auth = require('../../middleware/authenticate');
+const { authenticate } = require('../../middleware/authenticate');
 const c = require('./academy.controller');
 
-router.use(auth);
+router.use(authenticate);
 
 // Zoom Accounts
 router.get('/zoom-accounts', c.getZoomAccounts);
