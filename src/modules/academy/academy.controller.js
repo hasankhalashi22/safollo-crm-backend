@@ -10,9 +10,10 @@ exports.updateZoomAccount = wrap(async (req) => { superAdminOnly(req); return sv
 exports.deleteZoomAccount = wrap(async (req) => { superAdminOnly(req); return svc.deleteZoomAccount(req.params.id); });
 
 // Payment Rates
-exports.getPaymentRates   = wrap(async (req) => svc.getPaymentRates());
-exports.upsertPaymentRate  = wrap(async (req) => { superAdminOnly(req); return svc.upsertPaymentRate(req.body); });
-exports.deletePaymentRate  = wrap(async (req) => { superAdminOnly(req); return svc.deletePaymentRate(req.params.id); });
+exports.getPaymentRates        = wrap(async (req) => svc.getPaymentRates());
+exports.upsertPaymentRate      = wrap(async (req) => { superAdminOnly(req); return svc.upsertPaymentRate(req.body); });
+exports.deletePaymentRate      = wrap(async (req) => { superAdminOnly(req); return svc.deletePaymentRate(req.params.id); });
+exports.deleteCourseTypeRates  = wrap(async (req) => { superAdminOnly(req); return svc.deleteCourseTypeRates(req.params.courseType); });
 
 // Teachers
 exports.getTeachers     = wrap(async (req) => svc.getTeachers());

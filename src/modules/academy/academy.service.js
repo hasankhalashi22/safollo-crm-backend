@@ -47,6 +47,10 @@ const deletePaymentRate = async (id) => {
   await query(`DELETE FROM academy_payment_rates WHERE id=$1`, [id]);
   return { deleted: true };
 };
+const deleteCourseTypeRates = async (course_type) => {
+  await query(`DELETE FROM academy_payment_rates WHERE course_type=$1`, [course_type]);
+  return { deleted: true };
+};
 
 // ── Teachers ──────────────────────────────────────────────────────────────────
 const getTeachers = async () => {
@@ -68,26 +72,28 @@ const getTeacher = async (id) => {
   return r.rows[0];
 };
 const createTeacher = async (data) => {
-  const { full_name, teacher_type, phone, email, specialization, bio, zoom_display_name } = data;
+  const { full_name, teacher_type, teacher_category, phone, email, specialization, bio, zoom_display_name, fixed_rate } = data;
   const countR = await query(`SELECT COUNT(*) FROM academy_teachers`);
   const num = String(parseInt(countR.rows[0].count) + 1).padStart(4, '0');
   const teacher_code = `TCH-${num}`;
   const r = await query(
-    `INSERT INTO academy_teachers (teacher_code, full_name, teacher_type, phone, email, specialization, bio, zoom_display_name)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [teacher_code, full_name, teacher_type || 'junior', phone || null, email || null,
-     specialization || null, bio || null, zoom_display_name || null]
+    `INSERT INTO academy_teachers (teacher_code, full_name, teacher_type, teacher_category, phone, email, specialization, bio, zoom_display_name, fixed_rate)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    [teacher_code, full_name, teacher_type || 'junior', teacher_category || 'non_cadre',
+     phone || null, email || null, specialization || null, bio || null,
+     zoom_display_name || null, fixed_rate ? Number(fixed_rate) : null]
   );
   return r.rows[0];
 };
 const updateTeacher = async (id, data) => {
-  const { full_name, teacher_type, phone, email, specialization, bio, zoom_display_name, is_active } = data;
+  const { full_name, teacher_type, teacher_category, phone, email, specialization, bio, zoom_display_name, is_active, fixed_rate } = data;
   const r = await query(
-    `UPDATE academy_teachers SET full_name=$1, teacher_type=$2, phone=$3, email=$4,
-     specialization=$5, bio=$6, zoom_display_name=$7, is_active=$8, updated_at=NOW()
-     WHERE id=$9 RETURNING *`,
-    [full_name, teacher_type, phone || null, email || null,
-     specialization || null, bio || null, zoom_display_name || null, is_active ?? true, id]
+    `UPDATE academy_teachers SET full_name=$1, teacher_type=$2, teacher_category=$3, phone=$4, email=$5,
+     specialization=$6, bio=$7, zoom_display_name=$8, is_active=$9, fixed_rate=$10, updated_at=NOW()
+     WHERE id=$11 RETURNING *`,
+    [full_name, teacher_type, teacher_category || 'non_cadre', phone || null, email || null,
+     specialization || null, bio || null, zoom_display_name || null, is_active ?? true,
+     fixed_rate ? Number(fixed_rate) : null, id]
   );
   if (!r.rows.length) throw { statusCode: 404, message: 'পাওয়া যায়নি' };
   return r.rows[0];
@@ -582,7 +588,7 @@ const importSubjectExcel = async (subjectId, buffer) => {
 
 module.exports = {
   getZoomAccounts, createZoomAccount, updateZoomAccount, deleteZoomAccount,
-  getPaymentRates, upsertPaymentRate, deletePaymentRate,
+  getPaymentRates, upsertPaymentRate, deletePaymentRate, deleteCourseTypeRates,
   getTeachers, getTeacher, createTeacher, updateTeacher, deleteTeacher, getTeacherHistory,
   getCourses, createCourse, updateCourse, deleteCourse,
   getCoursePlans, createPlan, updatePlan, deletePlan,

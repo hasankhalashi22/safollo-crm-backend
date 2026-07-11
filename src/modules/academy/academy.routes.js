@@ -14,6 +14,7 @@ router.delete('/zoom-accounts/:id', c.deleteZoomAccount);
 router.get('/payment-rates', c.getPaymentRates);
 router.post('/payment-rates', c.upsertPaymentRate);
 router.delete('/payment-rates/:id', c.deletePaymentRate);
+router.delete('/payment-rates/course/:courseType', c.deleteCourseTypeRates);
 
 // Teachers
 router.get('/teachers', c.getTeachers);
