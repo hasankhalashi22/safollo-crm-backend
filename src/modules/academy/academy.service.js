@@ -200,7 +200,15 @@ const deletePlan = async (id) => {
 // ── Plan Subjects ─────────────────────────────────────────────────────────────
 const getPlanSubjects = async (planId) => {
   const subjects = await query(
-    `SELECT ps.*, COUNT(pl.id) AS lecture_count
+    `SELECT ps.*,
+       COALESCE(
+         json_agg(
+           json_build_object('id', pl.id, 'serial_no', pl.serial_no, 'title', pl.title, 'details', pl.details)
+           ORDER BY pl.serial_no
+         ) FILTER (WHERE pl.id IS NOT NULL),
+         '[]'::json
+       ) AS lectures,
+       COUNT(pl.id) AS lecture_count
      FROM academy_plan_subjects ps
      LEFT JOIN academy_plan_lectures pl ON pl.subject_id = ps.id
      WHERE ps.plan_id = $1
@@ -339,10 +347,17 @@ const getBatchOutline = async (batchId) => {
 
 const addOutlineRow = async (batchId, data, createdBy) => {
   const { row_type, topic, scheduled_date, scheduled_time, class_type, teacher_id, zoom_link, notes,
-          zoom_account_id, class_mode, location, subject_name } = data;
+          zoom_account_id, class_mode, location, subject_name, after_row_no } = data;
 
-  const maxR = await query(`SELECT COALESCE(MAX(row_no), 0) AS mx FROM academy_batch_outline WHERE batch_id=$1`, [batchId]);
-  const row_no = parseInt(maxR.rows[0].mx) + 1;
+  let row_no;
+  if (after_row_no != null) {
+    // Shift all rows after the insertion point up by 1
+    await query(`UPDATE academy_batch_outline SET row_no = row_no + 1 WHERE batch_id=$1 AND row_no > $2`, [batchId, after_row_no]);
+    row_no = parseInt(after_row_no) + 1;
+  } else {
+    const maxR = await query(`SELECT COALESCE(MAX(row_no), 0) AS mx FROM academy_batch_outline WHERE batch_id=$1`, [batchId]);
+    row_no = parseInt(maxR.rows[0].mx) + 1;
+  }
 
   let class_no = null;
   if (row_type === 'class') {
@@ -391,7 +406,7 @@ const updateOutlineRow = async (id, data, updatedBy) => {
   const old = existing.rows[0];
 
   const { topic, scheduled_date, scheduled_time, class_type, teacher_id, zoom_link, status, notes,
-          zoom_account_id, class_mode, location, subject_name } = data;
+          zoom_account_id, class_mode, location, subject_name, is_active } = data;
 
   // Track history for key changes
   const trackFields = ['scheduled_date', 'teacher_id', 'status'];
@@ -412,13 +427,15 @@ const updateOutlineRow = async (id, data, updatedBy) => {
   const r = await query(
     `UPDATE academy_batch_outline SET topic=$1, scheduled_date=$2, scheduled_time=$3,
      class_type=$4, teacher_id=$5, zoom_link=$6, status=$7, notes=$8,
-     zoom_account_id=$9, class_mode=$10, location=$11, subject_name=$12, updated_at=NOW()
-     WHERE id=$13 RETURNING *`,
+     zoom_account_id=$9, class_mode=$10, location=$11, subject_name=$12,
+     is_active=$13, updated_at=NOW()
+     WHERE id=$14 RETURNING *`,
     [topic ?? old.topic, scheduled_date ?? old.scheduled_date, scheduled_time ?? old.scheduled_time,
      class_type ?? old.class_type, teacher_id ?? old.teacher_id,
      zoom_link ?? old.zoom_link, status ?? old.status, notes ?? old.notes,
      zoom_account_id ?? old.zoom_account_id, class_mode ?? old.class_mode,
-     location ?? old.location, subject_name ?? old.subject_name, id]
+     location ?? old.location, subject_name ?? old.subject_name,
+     is_active ?? old.is_active ?? true, id]
   );
   return r.rows[0];
 };

@@ -159,6 +159,14 @@ ALTER TABLE academy_batch_outline
   ADD CONSTRAINT fk_outline_feedback
   FOREIGN KEY (feedback_id) REFERENCES academy_class_feedback(id);
 
+ALTER TABLE academy_batch_outline ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE academy_batch_outline ADD COLUMN IF NOT EXISTS label TEXT;
+ALTER TABLE academy_batch_outline ADD COLUMN IF NOT EXISTS exam_no INT;
+ALTER TABLE academy_batch_outline ADD COLUMN IF NOT EXISTS zoom_account_id UUID REFERENCES academy_zoom_accounts(id);
+ALTER TABLE academy_batch_outline ADD COLUMN IF NOT EXISTS class_mode TEXT DEFAULT 'online';
+ALTER TABLE academy_batch_outline ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE academy_batch_outline ADD COLUMN IF NOT EXISTS subject_name TEXT;
+
 -- ── 12. Teacher Payments ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS academy_teacher_payments (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
