@@ -70,6 +70,7 @@ router.post('/feedbacks/:id/approve', c.approveFeedback);
 // Teacher Payments
 router.get('/teacher-payments', c.getTeacherPayments);
 router.post('/teacher-payments/pay', c.payTeacher);
+router.post('/teacher-payments/recalculate', c.recalculatePayments);
 
 // Reports
 router.get('/reports/schedule', c.getScheduleReport);

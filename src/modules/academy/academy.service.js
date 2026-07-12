@@ -554,6 +554,41 @@ const getTeacherPayments = async (teacherId) => {
   return r.rows;
 };
 
+const recalculatePayments = async () => {
+  // Fetch all pending payments with amount=0
+  const pendingR = await query(
+    `SELECT tp.id, tp.outline_id, tp.teacher_id, tp.batch_id
+     FROM academy_teacher_payments tp
+     WHERE tp.status='pending' AND (tp.amount=0 OR tp.amount IS NULL)`
+  );
+  let updated = 0;
+  for (const p of pendingR.rows) {
+    // Get teacher category
+    const tR = await query(`SELECT teacher_category FROM academy_teachers WHERE id=$1`, [p.teacher_id]);
+    const teacherCategory = tR.rows[0]?.teacher_category || 'non_cadre';
+    // Get outline class_mode
+    const oR = await query(`SELECT class_mode FROM academy_batch_outline WHERE id=$1`, [p.outline_id]);
+    const classMode = oR.rows[0]?.class_mode || 'online';
+    // Get course name from batch
+    const bR = await query(
+      `SELECT c.course_name FROM academy_batches b JOIN academy_courses c ON c.id=b.course_id WHERE b.id=$1`,
+      [p.batch_id]
+    );
+    const courseName = bR.rows[0]?.course_name || '';
+    // Lookup rate
+    const rR = await query(
+      `SELECT rate_per_class FROM academy_payment_rates WHERE course_type=$1 AND class_mode=$2 AND teacher_category=$3`,
+      [courseName, classMode, teacherCategory]
+    );
+    const rate = parseFloat(rR.rows[0]?.rate_per_class || 0);
+    if (rate > 0) {
+      await query(`UPDATE academy_teacher_payments SET amount=$1 WHERE id=$2`, [rate, p.id]);
+      updated++;
+    }
+  }
+  return { total: pendingR.rows.length, updated };
+};
+
 const payTeacher = async ({ payment_ids, note, paid_by }) => {
   const pendingR = await query(
     `SELECT SUM(amount) AS total FROM academy_teacher_payments WHERE id=ANY($1) AND status='pending'`,
@@ -665,7 +700,7 @@ module.exports = {
   getBatches, createBatch, updateBatch, deleteBatch,
   getBatchOutline, addOutlineRow, bulkAddOutlineRows, updateOutlineRow, deleteOutlineRow, reorderOutline,
   submitFeedback, getPendingFeedbacks, approveFeedback,
-  getTeacherPayments, payTeacher,
+  getTeacherPayments, payTeacher, recalculatePayments,
   getScheduleReport,
   importPlanExcel, importSubjectExcel,
 };
