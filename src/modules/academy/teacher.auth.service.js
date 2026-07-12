@@ -31,15 +31,15 @@ const teacherRegister = async ({ full_name, phone, email, teacher_category, cadr
 
 // ── Public: Login ─────────────────────────────────────────────────────────────
 const teacherLogin = async ({ phone, password }) => {
-  if (!phone || !password) throw { statusCode: 400, message: 'ফোন ও পাসওয়ার্ড দিন' };
+  if (!phone || !password) throw { statusCode: 400, message: 'আইডি/ফোন ও পিন দিন' };
 
   const r = await query(
     `SELECT id, teacher_code, full_name, phone, email, password_hash,
             approval_status, teacher_type, teacher_category, specialization, fixed_rate
-     FROM academy_teachers WHERE phone=$1`,
-    [phone]
+     FROM academy_teachers WHERE phone=$1 OR teacher_code=UPPER($1)`,
+    [phone.trim()]
   );
-  if (!r.rows.length) throw { statusCode: 404, message: 'এই নম্বরে কোনো অ্যাকাউন্ট নেই' };
+  if (!r.rows.length) throw { statusCode: 404, message: 'এই ফোন/আইডিতে কোনো অ্যাকাউন্ট নেই' };
 
   const teacher = r.rows[0];
 
