@@ -555,38 +555,58 @@ const getTeacherPayments = async (teacherId) => {
 };
 
 const recalculatePayments = async () => {
-  // Fetch all pending payments with amount=0
-  const pendingR = await query(
-    `SELECT tp.id, tp.outline_id, tp.teacher_id, tp.batch_id
-     FROM academy_teacher_payments tp
-     WHERE tp.status='pending' AND (tp.amount=0 OR tp.amount IS NULL)`
+  // Find all approved feedbacks and ensure payment records exist with correct amounts
+  const feedbacksR = await query(
+    `SELECT cf.outline_id, cf.teacher_id
+     FROM academy_class_feedback cf
+     WHERE cf.approved=true AND cf.teacher_id IS NOT NULL`
   );
+
+  let created = 0;
   let updated = 0;
-  for (const p of pendingR.rows) {
-    // Get teacher category
-    const tR = await query(`SELECT teacher_category FROM academy_teachers WHERE id=$1`, [p.teacher_id]);
+
+  for (const cf of feedbacksR.rows) {
+    const oR = await query(`SELECT * FROM academy_batch_outline WHERE id=$1`, [cf.outline_id]);
+    if (!oR.rows.length) continue;
+    const outline = oR.rows[0];
+
+    const tR = await query(`SELECT teacher_category FROM academy_teachers WHERE id=$1`, [cf.teacher_id]);
     const teacherCategory = tR.rows[0]?.teacher_category || 'non_cadre';
-    // Get outline class_mode
-    const oR = await query(`SELECT class_mode FROM academy_batch_outline WHERE id=$1`, [p.outline_id]);
-    const classMode = oR.rows[0]?.class_mode || 'online';
-    // Get course name from batch
+    const classMode = outline.class_mode || 'online';
+
     const bR = await query(
       `SELECT c.course_name FROM academy_batches b JOIN academy_courses c ON c.id=b.course_id WHERE b.id=$1`,
-      [p.batch_id]
+      [outline.batch_id]
     );
     const courseName = bR.rows[0]?.course_name || '';
-    // Lookup rate
+
     const rR = await query(
       `SELECT rate_per_class FROM academy_payment_rates WHERE course_type=$1 AND class_mode=$2 AND teacher_category=$3`,
       [courseName, classMode, teacherCategory]
     );
     const rate = parseFloat(rR.rows[0]?.rate_per_class || 0);
-    if (rate > 0) {
-      await query(`UPDATE academy_teacher_payments SET amount=$1 WHERE id=$2`, [rate, p.id]);
+    if (!rate) continue;
+
+    const existsR = await query(
+      `SELECT id, amount FROM academy_teacher_payments WHERE outline_id=$1 AND teacher_id=$2`,
+      [cf.outline_id, cf.teacher_id]
+    );
+
+    if (!existsR.rows.length) {
+      await query(
+        `INSERT INTO academy_teacher_payments (teacher_id, outline_id, batch_id, class_date, class_type, amount)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [cf.teacher_id, cf.outline_id, outline.batch_id,
+         outline.scheduled_date, outline.class_type || 'regular', rate]
+      );
+      created++;
+    } else if (parseFloat(existsR.rows[0].amount) === 0) {
+      await query(`UPDATE academy_teacher_payments SET amount=$1 WHERE id=$2`, [rate, existsR.rows[0].id]);
       updated++;
     }
   }
-  return { total: pendingR.rows.length, updated };
+
+  return { total: feedbacksR.rows.length, created, updated };
 };
 
 const payTeacher = async ({ payment_ids, note, paid_by }) => {
