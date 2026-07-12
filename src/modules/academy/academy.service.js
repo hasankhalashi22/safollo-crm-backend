@@ -61,6 +61,7 @@ const getTeachers = async () => {
        COUNT(DISTINCT CASE WHEN p.status='pending' THEN p.id END) AS pending_count
      FROM academy_teachers t
      LEFT JOIN academy_teacher_payments p ON p.teacher_id = t.id
+     WHERE t.approval_status = 'approved'
      GROUP BY t.id
      ORDER BY t.full_name`
   );
