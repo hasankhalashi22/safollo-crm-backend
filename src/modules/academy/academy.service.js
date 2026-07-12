@@ -559,19 +559,20 @@ const payTeacher = async ({ payment_ids, note, paid_by }) => {
 };
 
 // ── Reports ───────────────────────────────────────────────────────────────────
-const getScheduleReport = async ({ teacher_id, batch_id, status, month, row_type, date_from, date_to, subject_name }) => {
+const getScheduleReport = async ({ teacher_id, batch_id, status, month, row_type, date_from, date_to, subject_name, feedback_approved }) => {
   const conditions = [];
   const params = [];
   let idx = 1;
 
-  if (teacher_id)   { conditions.push(`bo.teacher_id=$${idx++}`); params.push(teacher_id); }
-  if (batch_id)     { conditions.push(`bo.batch_id=$${idx++}`); params.push(batch_id); }
-  if (status)       { conditions.push(`bo.status=$${idx++}`); params.push(status); }
-  if (row_type)     { conditions.push(`bo.row_type=$${idx++}`); params.push(row_type); }
-  if (month)        { conditions.push(`TO_CHAR(bo.scheduled_date,'YYYY-MM')=$${idx++}`); params.push(month); }
-  if (date_from)    { conditions.push(`bo.scheduled_date>=$${idx++}`); params.push(date_from); }
-  if (date_to)      { conditions.push(`bo.scheduled_date<=$${idx++}`); params.push(date_to); }
-  if (subject_name) { conditions.push(`bo.subject_name ILIKE $${idx++}`); params.push(`%${subject_name}%`); }
+  if (teacher_id)      { conditions.push(`bo.teacher_id=$${idx++}`); params.push(teacher_id); }
+  if (batch_id)        { conditions.push(`bo.batch_id=$${idx++}`); params.push(batch_id); }
+  if (status)          { conditions.push(`bo.status=$${idx++}`); params.push(status); }
+  if (row_type)        { conditions.push(`bo.row_type=$${idx++}`); params.push(row_type); }
+  if (month)           { conditions.push(`TO_CHAR(bo.scheduled_date,'YYYY-MM')=$${idx++}`); params.push(month); }
+  if (date_from)       { conditions.push(`bo.scheduled_date>=$${idx++}`); params.push(date_from); }
+  if (date_to)         { conditions.push(`bo.scheduled_date<=$${idx++}`); params.push(date_to); }
+  if (subject_name)    { conditions.push(`bo.subject_name ILIKE $${idx++}`); params.push(`%${subject_name}%`); }
+  if (feedback_approved) { conditions.push(`EXISTS (SELECT 1 FROM academy_class_feedback cf WHERE cf.outline_id=bo.id AND cf.approved=true)`); }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
