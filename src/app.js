@@ -83,6 +83,7 @@ app.use('/api/leave', leaveRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/academy', require('./modules/academy/academy.routes'));
+app.use('/api/teacher', require('./modules/academy/teacher.auth.routes'));
 
 // ── Error handling ────────────────────────────────────────
 app.use(notFound);
