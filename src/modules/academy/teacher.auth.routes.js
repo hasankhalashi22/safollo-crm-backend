@@ -12,6 +12,7 @@ router.put('/me',          c.authenticateTeacher, c.updateMyProfile);
 router.get('/courses',     c.authenticateTeacher, c.getCoursesWithSubjects);
 router.get('/classes',     c.authenticateTeacher, c.getMyClasses);
 router.get('/payments',    c.authenticateTeacher, c.getMyPayments);
+router.post('/outline/:outlineId/feedback', c.authenticateTeacher, c.submitFeedback);
 
 // ── Admin: manage teacher accounts ───────────────────────────────────────────
 router.get('/pending',                     authenticate, c.getPendingTeachers);

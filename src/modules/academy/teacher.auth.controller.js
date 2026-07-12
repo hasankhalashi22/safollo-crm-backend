@@ -1,4 +1,5 @@
 const svc = require('./teacher.auth.service');
+const academySvc = require('./academy.service');
 const { verifyToken } = require('../../utils/jwt');
 
 const wrap = (fn) => async (req, res, next) => {
@@ -30,6 +31,8 @@ exports.getMyPayments = wrap(async (req) => svc.getMyPayments(req.teacher.id));
 // ── Admin ─────────────────────────────────────────────────────────────────────
 exports.getCoursesWithSubjects = wrap(async (req) => svc.getCoursesWithSubjects());
 exports.updateMyProfile        = wrap(async (req) => svc.updateMyProfile(req.teacher.id, req.body));
+exports.submitFeedback = wrap(async (req) => academySvc.submitFeedback(req.params.outlineId, req.teacher.id, req.body.note));
+
 exports.getPendingTeachers  = wrap(async (req) => svc.getPendingTeachers());
 exports.approveTeacher      = wrap(async (req) => svc.approveTeacher(req.params.id, req.user.id, req.body.approved));
 exports.resetTeacherPassword = wrap(async (req) => svc.resetTeacherPassword(req.params.id, req.body.password));
