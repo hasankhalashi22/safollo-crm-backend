@@ -499,23 +499,24 @@ const approveFeedback = async (feedbackId, adminId, approved) => {
     await query(`UPDATE academy_batch_outline SET status='done', updated_at=NOW() WHERE id=$1`, [cf.outline_id]);
 
     const outlineR = await query(
-      `SELECT bo.*, t.teacher_type FROM academy_batch_outline bo
-       JOIN academy_teachers t ON t.id = bo.teacher_id
-       WHERE bo.id=$1`, [cf.outline_id]
+      `SELECT bo.* FROM academy_batch_outline bo WHERE bo.id=$1`, [cf.outline_id]
     );
     if (outlineR.rows.length) {
       const outline = outlineR.rows[0];
+      const teacherId = cf.teacher_id;
+      const teacherR = await query(`SELECT teacher_type FROM academy_teachers WHERE id=$1`, [teacherId]);
+      const teacherType = teacherR.rows[0]?.teacher_type || 'regular';
       const rateR = await query(
         `SELECT rate_per_class FROM academy_payment_rates WHERE teacher_type=$1 AND class_type=$2`,
-        [outline.teacher_type, outline.class_type || 'regular']
+        [teacherType, outline.class_type || 'regular']
       );
       const amount = rateR.rows.length ? parseFloat(rateR.rows[0].rate_per_class) : 0;
       if (amount > 0) {
         await query(
           `INSERT INTO academy_teacher_payments (teacher_id, outline_id, batch_id, class_date, class_type, amount)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [cf.teacher_id, cf.outline_id, outline.batch_id,
-           outline.scheduled_date, outline.class_type, amount]
+          [teacherId, cf.outline_id, outline.batch_id,
+           outline.scheduled_date, outline.class_type || 'regular', amount]
         );
       }
     }
@@ -558,16 +559,19 @@ const payTeacher = async ({ payment_ids, note, paid_by }) => {
 };
 
 // ── Reports ───────────────────────────────────────────────────────────────────
-const getScheduleReport = async ({ teacher_id, batch_id, status, month, row_type }) => {
+const getScheduleReport = async ({ teacher_id, batch_id, status, month, row_type, date_from, date_to, subject_name }) => {
   const conditions = [];
   const params = [];
   let idx = 1;
 
-  if (teacher_id) { conditions.push(`bo.teacher_id=$${idx++}`); params.push(teacher_id); }
-  if (batch_id)   { conditions.push(`bo.batch_id=$${idx++}`); params.push(batch_id); }
-  if (status)     { conditions.push(`bo.status=$${idx++}`); params.push(status); }
-  if (row_type)   { conditions.push(`bo.row_type=$${idx++}`); params.push(row_type); }
-  if (month)      { conditions.push(`TO_CHAR(bo.scheduled_date,'YYYY-MM')=$${idx++}`); params.push(month); }
+  if (teacher_id)   { conditions.push(`bo.teacher_id=$${idx++}`); params.push(teacher_id); }
+  if (batch_id)     { conditions.push(`bo.batch_id=$${idx++}`); params.push(batch_id); }
+  if (status)       { conditions.push(`bo.status=$${idx++}`); params.push(status); }
+  if (row_type)     { conditions.push(`bo.row_type=$${idx++}`); params.push(row_type); }
+  if (month)        { conditions.push(`TO_CHAR(bo.scheduled_date,'YYYY-MM')=$${idx++}`); params.push(month); }
+  if (date_from)    { conditions.push(`bo.scheduled_date>=$${idx++}`); params.push(date_from); }
+  if (date_to)      { conditions.push(`bo.scheduled_date<=$${idx++}`); params.push(date_to); }
+  if (subject_name) { conditions.push(`bo.subject_name ILIKE $${idx++}`); params.push(`%${subject_name}%`); }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
