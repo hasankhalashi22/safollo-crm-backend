@@ -73,17 +73,16 @@ const teacherLogin = async ({ phone, password }) => {
 // ── Teacher: My classes ───────────────────────────────────────────────────────
 const getMyClasses = async (teacherId) => {
   const r = await query(
-    `SELECT bo.id, bo.row_type, bo.class_no, bo.scheduled_date, bo.scheduled_time,
-            bo.topic, bo.status, bo.class_type, bo.zoom_link,
+    `SELECT bo.id, bo.class_no, bo.scheduled_date, bo.scheduled_time,
+            bo.topic, bo.status,
+            bo.zoom_link,
             b.batch_name, b.id as batch_id,
-            c.course_name,
-            za.account_name as zoom_account_name
+            c.course_name
      FROM academy_batch_outline bo
      JOIN academy_batches b ON b.id = bo.batch_id
      JOIN academy_courses c ON c.id = b.course_id
-     LEFT JOIN academy_zoom_accounts za ON za.id = bo.zoom_account_id
      WHERE bo.teacher_id=$1
-     ORDER BY bo.scheduled_date DESC, bo.scheduled_time`,
+     ORDER BY bo.scheduled_date DESC NULLS LAST, bo.scheduled_time`,
     [teacherId]
   );
   return r.rows;
