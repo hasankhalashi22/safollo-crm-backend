@@ -386,14 +386,16 @@ const bulkAddOutlineRows = async (batchId, rows) => {
     rowNo++;
     const r = await query(
       `INSERT INTO academy_batch_outline
-       (batch_id, row_no, row_type, class_no, topic, scheduled_date, scheduled_time, class_type, teacher_id,
-        zoom_link, notes, zoom_account_id, class_mode, location, subject_name, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
-      [batchId, rowNo, row.row_type || 'class', row.class_no || null, row.topic || null,
+       (batch_id, row_no, row_type, label, class_no, exam_no, topic, scheduled_date, scheduled_time,
+        class_type, teacher_id, zoom_link, notes, zoom_account_id, class_mode, location,
+        subject_name, status, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+      [batchId, rowNo, row.row_type || 'class', row.label || null,
+       row.class_no || null, row.exam_no || null, row.topic || null,
        row.scheduled_date || null, row.scheduled_time || null, row.class_type || 'regular',
        row.teacher_id || null, row.zoom_link || null, row.notes || null,
        row.zoom_account_id || null, row.class_mode || 'online', row.location || null,
-       row.subject_name || null, row.status || 'scheduled']
+       row.subject_name || null, row.status || 'scheduled', true]
     );
     results.push(r.rows[0]);
   }
