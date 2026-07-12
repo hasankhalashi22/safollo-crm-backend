@@ -35,7 +35,8 @@ const teacherLogin = async ({ phone, password }) => {
 
   const r = await query(
     `SELECT id, teacher_code, full_name, phone, email, password_hash,
-            approval_status, teacher_type, teacher_category, specialization, fixed_rate
+            approval_status, teacher_type, teacher_category, specialization, fixed_rate,
+            is_profile_complete
      FROM academy_teachers WHERE phone=$1 OR teacher_code=UPPER($1)`,
     [phone.trim()]
   );
@@ -65,7 +66,7 @@ const teacherLogin = async ({ phone, password }) => {
       email: teacher.email,
       teacher_type: teacher.teacher_type,
       teacher_category: teacher.teacher_category,
-      specialization: teacher.specialization,
+      is_profile_complete: teacher.is_profile_complete,
     },
   };
 };
@@ -105,11 +106,46 @@ const getMyPayments = async (teacherId) => {
 const getMyProfile = async (teacherId) => {
   const r = await query(
     `SELECT id, teacher_code, full_name, phone, email, teacher_type, teacher_category,
-            specialization, bio, zoom_display_name, last_login
+            cadre_name, current_posting, address, permanent_address, backup_phone, backup_whatsapp,
+            profile_photo, last_degree, degree_subject, degree_institution,
+            teaching_interests, experience,
+            bank_account_no, bank_account_name, bank_branch, bkash_phone, nagad_phone,
+            is_profile_complete, last_login
      FROM academy_teachers WHERE id=$1`,
     [teacherId]
   );
   if (!r.rows.length) throw { statusCode: 404, message: 'পাওয়া যায়নি' };
+  return r.rows[0];
+};
+
+// ── Teacher: Update profile ───────────────────────────────────────────────────
+const updateMyProfile = async (teacherId, data) => {
+  const {
+    profile_photo, last_degree, degree_subject, degree_institution,
+    permanent_address, backup_phone, backup_whatsapp,
+    teaching_interests, experience,
+    bank_account_no, bank_account_name, bank_branch, bkash_phone, nagad_phone,
+  } = data;
+
+  const r = await query(
+    `UPDATE academy_teachers SET
+       profile_photo=$1, last_degree=$2, degree_subject=$3, degree_institution=$4,
+       permanent_address=$5, backup_phone=$6, backup_whatsapp=$7,
+       teaching_interests=$8, experience=$9,
+       bank_account_no=$10, bank_account_name=$11, bank_branch=$12,
+       bkash_phone=$13, nagad_phone=$14,
+       is_profile_complete=TRUE, updated_at=NOW()
+     WHERE id=$15
+     RETURNING id, is_profile_complete`,
+    [
+      profile_photo || null, last_degree || null, degree_subject || null, degree_institution || null,
+      permanent_address || null, backup_phone || null, backup_whatsapp || false,
+      JSON.stringify(teaching_interests || []), experience || null,
+      bank_account_no || null, bank_account_name || null, bank_branch || null,
+      bkash_phone || null, nagad_phone || null,
+      teacherId,
+    ]
+  );
   return r.rows[0];
 };
 
@@ -149,6 +185,6 @@ const getPendingTeachers = async () => {
 
 module.exports = {
   teacherRegister, teacherLogin,
-  getMyClasses, getMyPayments, getMyProfile,
+  getMyClasses, getMyPayments, getMyProfile, updateMyProfile,
   approveTeacher, resetTeacherPassword, getPendingTeachers,
 };

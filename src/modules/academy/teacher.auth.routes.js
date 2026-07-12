@@ -7,9 +7,10 @@ router.post('/register', c.register);
 router.post('/login',    c.login);
 
 // ── Teacher protected ─────────────────────────────────────────────────────────
-router.get('/me',       c.authenticateTeacher, c.getMyProfile);
-router.get('/classes',  c.authenticateTeacher, c.getMyClasses);
-router.get('/payments', c.authenticateTeacher, c.getMyPayments);
+router.get('/me',          c.authenticateTeacher, c.getMyProfile);
+router.put('/me',          c.authenticateTeacher, c.updateMyProfile);
+router.get('/classes',     c.authenticateTeacher, c.getMyClasses);
+router.get('/payments',    c.authenticateTeacher, c.getMyPayments);
 
 // ── Admin: manage teacher accounts ───────────────────────────────────────────
 router.get('/pending',                     authenticate, c.getPendingTeachers);
