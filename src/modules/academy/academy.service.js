@@ -322,10 +322,12 @@ const getBatchOutline = async (batchId) => {
   const r = await query(
     `SELECT bo.*,
             t.full_name AS teacher_name, t.teacher_code,
+            za.account_name AS zoom_account_name,
             cf.id AS feedback_id, cf.status AS feedback_status, cf.submitted_at AS feedback_submitted_at,
             tp.status AS payment_status, tp.amount AS payment_amount
      FROM academy_batch_outline bo
      LEFT JOIN academy_teachers t ON t.id = bo.teacher_id
+     LEFT JOIN academy_zoom_accounts za ON za.id = bo.zoom_account_id
      LEFT JOIN academy_class_feedback cf ON cf.outline_id = bo.id
      LEFT JOIN academy_teacher_payments tp ON tp.outline_id = bo.id
      WHERE bo.batch_id = $1
@@ -336,7 +338,8 @@ const getBatchOutline = async (batchId) => {
 };
 
 const addOutlineRow = async (batchId, data, createdBy) => {
-  const { row_type, topic, scheduled_date, scheduled_time, class_type, teacher_id, zoom_link, notes } = data;
+  const { row_type, topic, scheduled_date, scheduled_time, class_type, teacher_id, zoom_link, notes,
+          zoom_account_id, class_mode, location, subject_name } = data;
 
   const maxR = await query(`SELECT COALESCE(MAX(row_no), 0) AS mx FROM academy_batch_outline WHERE batch_id=$1`, [batchId]);
   const row_no = parseInt(maxR.rows[0].mx) + 1;
@@ -349,13 +352,37 @@ const addOutlineRow = async (batchId, data, createdBy) => {
 
   const r = await query(
     `INSERT INTO academy_batch_outline
-     (batch_id, row_no, row_type, class_no, topic, scheduled_date, scheduled_time, class_type, teacher_id, zoom_link, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+     (batch_id, row_no, row_type, class_no, topic, scheduled_date, scheduled_time, class_type, teacher_id,
+      zoom_link, notes, zoom_account_id, class_mode, location, subject_name)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
     [batchId, row_no, row_type || 'class', class_no, topic || null,
      scheduled_date || null, scheduled_time || null, class_type || 'regular',
-     teacher_id || null, zoom_link || null, notes || null]
+     teacher_id || null, zoom_link || null, notes || null,
+     zoom_account_id || null, class_mode || 'online', location || null, subject_name || null]
   );
   return r.rows[0];
+};
+
+const bulkAddOutlineRows = async (batchId, rows) => {
+  const maxR = await query(`SELECT COALESCE(MAX(row_no), 0) AS mx FROM academy_batch_outline WHERE batch_id=$1`, [batchId]);
+  let rowNo = parseInt(maxR.rows[0].mx);
+  const results = [];
+  for (const row of rows) {
+    rowNo++;
+    const r = await query(
+      `INSERT INTO academy_batch_outline
+       (batch_id, row_no, row_type, class_no, topic, scheduled_date, scheduled_time, class_type, teacher_id,
+        zoom_link, notes, zoom_account_id, class_mode, location, subject_name, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+      [batchId, rowNo, row.row_type || 'class', row.class_no || null, row.topic || null,
+       row.scheduled_date || null, row.scheduled_time || null, row.class_type || 'regular',
+       row.teacher_id || null, row.zoom_link || null, row.notes || null,
+       row.zoom_account_id || null, row.class_mode || 'online', row.location || null,
+       row.subject_name || null, row.status || 'scheduled']
+    );
+    results.push(r.rows[0]);
+  }
+  return { inserted: results.length };
 };
 
 const updateOutlineRow = async (id, data, updatedBy) => {
@@ -363,7 +390,8 @@ const updateOutlineRow = async (id, data, updatedBy) => {
   if (!existing.rows.length) throw { statusCode: 404, message: 'পাওয়া যায়নি' };
   const old = existing.rows[0];
 
-  const { topic, scheduled_date, scheduled_time, class_type, teacher_id, zoom_link, status, notes } = data;
+  const { topic, scheduled_date, scheduled_time, class_type, teacher_id, zoom_link, status, notes,
+          zoom_account_id, class_mode, location, subject_name } = data;
 
   // Track history for key changes
   const trackFields = ['scheduled_date', 'teacher_id', 'status'];
@@ -383,11 +411,14 @@ const updateOutlineRow = async (id, data, updatedBy) => {
 
   const r = await query(
     `UPDATE academy_batch_outline SET topic=$1, scheduled_date=$2, scheduled_time=$3,
-     class_type=$4, teacher_id=$5, zoom_link=$6, status=$7, notes=$8, updated_at=NOW()
-     WHERE id=$9 RETURNING *`,
+     class_type=$4, teacher_id=$5, zoom_link=$6, status=$7, notes=$8,
+     zoom_account_id=$9, class_mode=$10, location=$11, subject_name=$12, updated_at=NOW()
+     WHERE id=$13 RETURNING *`,
     [topic ?? old.topic, scheduled_date ?? old.scheduled_date, scheduled_time ?? old.scheduled_time,
      class_type ?? old.class_type, teacher_id ?? old.teacher_id,
-     zoom_link ?? old.zoom_link, status ?? old.status, notes ?? old.notes, id]
+     zoom_link ?? old.zoom_link, status ?? old.status, notes ?? old.notes,
+     zoom_account_id ?? old.zoom_account_id, class_mode ?? old.class_mode,
+     location ?? old.location, subject_name ?? old.subject_name, id]
   );
   return r.rows[0];
 };

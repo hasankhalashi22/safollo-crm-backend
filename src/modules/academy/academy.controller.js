@@ -50,11 +50,12 @@ exports.updateBatch   = wrap(async (req) => { superAdminOnly(req); return svc.up
 exports.deleteBatch   = wrap(async (req) => { superAdminOnly(req); return svc.deleteBatch(req.params.id); });
 
 // Batch Outline
-exports.getBatchOutline   = wrap(async (req) => svc.getBatchOutline(req.params.batchId));
-exports.addOutlineRow     = wrap(async (req) => { superAdminOnly(req); return svc.addOutlineRow(req.params.batchId, req.body, req.user.id); });
-exports.updateOutlineRow  = wrap(async (req) => { superAdminOnly(req); return svc.updateOutlineRow(req.params.id, req.body, req.user.id); });
-exports.deleteOutlineRow  = wrap(async (req) => { superAdminOnly(req); return svc.deleteOutlineRow(req.params.id); });
-exports.reorderOutline    = wrap(async (req) => { superAdminOnly(req); return svc.reorderOutline(req.params.batchId, req.body.ordered_ids); });
+exports.getBatchOutline    = wrap(async (req) => svc.getBatchOutline(req.params.batchId));
+exports.addOutlineRow      = wrap(async (req) => { superAdminOnly(req); return svc.addOutlineRow(req.params.batchId, req.body, req.user.id); });
+exports.bulkAddOutlineRows = wrap(async (req) => { superAdminOnly(req); return svc.bulkAddOutlineRows(req.params.batchId, req.body.rows); });
+exports.updateOutlineRow   = wrap(async (req) => { superAdminOnly(req); return svc.updateOutlineRow(req.params.id, req.body, req.user.id); });
+exports.deleteOutlineRow   = wrap(async (req) => { superAdminOnly(req); return svc.deleteOutlineRow(req.params.id); });
+exports.reorderOutline     = wrap(async (req) => { superAdminOnly(req); return svc.reorderOutline(req.params.batchId, req.body.ordered_ids); });
 
 // Feedback
 exports.submitFeedback    = wrap(async (req) => svc.submitFeedback(req.params.outlineId, req.body.teacher_id, req.body.note));
