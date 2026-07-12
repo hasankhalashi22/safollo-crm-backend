@@ -5,10 +5,10 @@ const { generateToken } = require('../../utils/jwt');
 const SALT_ROUNDS = 10;
 
 // ── Public: Register ──────────────────────────────────────────────────────────
-const teacherRegister = async ({ full_name, phone, email, specialization, password }) => {
+const teacherRegister = async ({ full_name, phone, email, teacher_category, cadre_name, current_posting, address, password }) => {
   if (!full_name?.trim()) throw { statusCode: 400, message: 'নাম দিন' };
   if (!phone?.trim())     throw { statusCode: 400, message: 'ফোন নম্বর দিন' };
-  if (!password || password.length < 6) throw { statusCode: 400, message: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে' };
+  if (!password || password.length < 4) throw { statusCode: 400, message: 'পিন কমপক্ষে ৪ সংখ্যার হতে হবে' };
 
   const existing = await query(`SELECT id FROM academy_teachers WHERE phone=$1`, [phone]);
   if (existing.rows.length) throw { statusCode: 409, message: 'এই ফোন নম্বরে ইতোমধ্যে একটি অ্যাকাউন্ট আছে' };
@@ -17,13 +17,14 @@ const teacherRegister = async ({ full_name, phone, email, specialization, passwo
   const num     = String(parseInt(countR.rows[0].count) + 1).padStart(4, '0');
   const teacher_code = `TCH-${num}`;
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+  const cat = teacher_category || 'non_cadre';
 
   const r = await query(
     `INSERT INTO academy_teachers
-       (teacher_code, full_name, phone, email, specialization, password_hash, approval_status, teacher_category, teacher_type)
-     VALUES ($1,$2,$3,$4,$5,$6,'pending','non_cadre','junior')
+       (teacher_code, full_name, phone, email, teacher_category, cadre_name, current_posting, address, password_hash, approval_status, teacher_type)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','junior')
      RETURNING id, teacher_code, full_name, phone, approval_status`,
-    [teacher_code, full_name.trim(), phone.trim(), email || null, specialization || null, password_hash]
+    [teacher_code, full_name.trim(), phone.trim(), email || null, cat, cadre_name || null, current_posting || null, address || null, password_hash]
   );
   return r.rows[0];
 };
@@ -141,7 +142,7 @@ const resetTeacherPassword = async (id, newPassword) => {
 // ── Admin: Pending teachers ───────────────────────────────────────────────────
 const getPendingTeachers = async () => {
   const r = await query(
-    `SELECT id, teacher_code, full_name, phone, email, specialization, created_at
+    `SELECT id, teacher_code, full_name, phone, email, teacher_category, cadre_name, current_posting, address, created_at
      FROM academy_teachers WHERE approval_status='pending' ORDER BY created_at`,
   );
   return r.rows;
