@@ -71,6 +71,23 @@ const teacherLogin = async ({ phone, password }) => {
   };
 };
 
+// ── Teacher: Courses with subjects (for profile) ─────────────────────────────
+const getCoursesWithSubjects = async () => {
+  const courses = await query(`SELECT id, course_name FROM academy_courses ORDER BY course_name`);
+  const plans = await query(
+    `SELECT p.course_id, ps.id, ps.subject_name
+     FROM academy_plan_subjects ps
+     JOIN academy_course_plans p ON p.id = ps.plan_id
+     ORDER BY ps.serial_no`
+  );
+  const subjectsByCourse = {};
+  for (const s of plans.rows) {
+    if (!subjectsByCourse[s.course_id]) subjectsByCourse[s.course_id] = [];
+    subjectsByCourse[s.course_id].push({ id: s.id, subject_name: s.subject_name });
+  }
+  return courses.rows.map(c => ({ ...c, subjects: subjectsByCourse[c.id] || [] }));
+};
+
 // ── Teacher: My classes ───────────────────────────────────────────────────────
 const getMyClasses = async (teacherId) => {
   const r = await query(
@@ -185,6 +202,7 @@ const getPendingTeachers = async () => {
 
 module.exports = {
   teacherRegister, teacherLogin,
+  getCoursesWithSubjects,
   getMyClasses, getMyPayments, getMyProfile, updateMyProfile,
   approveTeacher, resetTeacherPassword, getPendingTeachers,
 };

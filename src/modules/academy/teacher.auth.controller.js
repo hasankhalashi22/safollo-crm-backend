@@ -28,7 +28,8 @@ exports.getMyClasses  = wrap(async (req) => svc.getMyClasses(req.teacher.id));
 exports.getMyPayments = wrap(async (req) => svc.getMyPayments(req.teacher.id));
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
-exports.updateMyProfile     = wrap(async (req) => svc.updateMyProfile(req.teacher.id, req.body));
+exports.getCoursesWithSubjects = wrap(async (req) => svc.getCoursesWithSubjects());
+exports.updateMyProfile        = wrap(async (req) => svc.updateMyProfile(req.teacher.id, req.body));
 exports.getPendingTeachers  = wrap(async (req) => svc.getPendingTeachers());
 exports.approveTeacher      = wrap(async (req) => svc.approveTeacher(req.params.id, req.user.id, req.body.approved));
 exports.resetTeacherPassword = wrap(async (req) => svc.resetTeacherPassword(req.params.id, req.body.password));
