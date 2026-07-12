@@ -504,20 +504,28 @@ const approveFeedback = async (feedbackId, adminId, approved) => {
     if (outlineR.rows.length) {
       const outline = outlineR.rows[0];
       const teacherId = cf.teacher_id;
-      const teacherR = await query(`SELECT teacher_type FROM academy_teachers WHERE id=$1`, [teacherId]);
-      const teacherType = teacherR.rows[0]?.teacher_type || 'regular';
-      const rateR = await query(
-        `SELECT rate_per_class FROM academy_payment_rates WHERE teacher_type=$1 AND class_type=$2`,
-        [teacherType, outline.class_type || 'regular']
-      );
-      const amount = rateR.rows.length ? parseFloat(rateR.rows[0].rate_per_class) : 0;
-      if (amount > 0) {
-        await query(
-          `INSERT INTO academy_teacher_payments (teacher_id, outline_id, batch_id, class_date, class_type, amount)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [teacherId, cf.outline_id, outline.batch_id,
-           outline.scheduled_date, outline.class_type || 'regular', amount]
+      if (teacherId) {
+        const teacherR = await query(`SELECT teacher_type FROM academy_teachers WHERE id=$1`, [teacherId]);
+        const teacherType = teacherR.rows[0]?.teacher_type || 'regular';
+        const classType = outline.class_type || 'regular';
+        const rateR = await query(
+          `SELECT rate_per_class FROM academy_payment_rates WHERE teacher_type=$1 AND class_type=$2`,
+          [teacherType, classType]
         );
+        const amount = rateR.rows.length ? parseFloat(rateR.rows[0].rate_per_class) : 0;
+        // Insert payment record even if amount is 0 (can be updated later)
+        const exists = await query(
+          `SELECT id FROM academy_teacher_payments WHERE outline_id=$1 AND teacher_id=$2`,
+          [cf.outline_id, teacherId]
+        );
+        if (!exists.rows.length) {
+          await query(
+            `INSERT INTO academy_teacher_payments (teacher_id, outline_id, batch_id, class_date, class_type, amount)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [teacherId, cf.outline_id, outline.batch_id,
+             outline.scheduled_date, classType, amount]
+          );
+        }
       }
     }
   }
