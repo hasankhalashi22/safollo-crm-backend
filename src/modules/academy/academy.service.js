@@ -646,7 +646,7 @@ module.exports = {
   getPlanSubjects, createSubject, updateSubject, deleteSubject, importSubject,
   saveLectures,
   getBatches, createBatch, updateBatch, deleteBatch,
-  getBatchOutline, addOutlineRow, updateOutlineRow, deleteOutlineRow, reorderOutline,
+  getBatchOutline, addOutlineRow, bulkAddOutlineRows, updateOutlineRow, deleteOutlineRow, reorderOutline,
   submitFeedback, getPendingFeedbacks, approveFeedback,
   getTeacherPayments, payTeacher,
   getScheduleReport,
