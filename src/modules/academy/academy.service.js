@@ -461,6 +461,18 @@ const deleteOutlineRow = async (id) => {
   return { deleted: true };
 };
 
+const clearBatchOutline = async (batchId) => {
+  const rows = await query(`SELECT id FROM academy_batch_outline WHERE batch_id=$1`, [batchId]);
+  const ids = rows.rows.map(r => r.id);
+  if (!ids.length) return { deleted: 0 };
+  await query(`UPDATE academy_batch_outline SET feedback_id=NULL WHERE batch_id=$1`, [batchId]);
+  await query(`DELETE FROM academy_outline_history WHERE outline_id=ANY($1::uuid[])`, [ids]);
+  await query(`DELETE FROM academy_class_feedback WHERE outline_id=ANY($1::uuid[])`, [ids]);
+  await query(`DELETE FROM academy_teacher_payments WHERE outline_id=ANY($1::uuid[])`, [ids]);
+  await query(`DELETE FROM academy_batch_outline WHERE batch_id=$1`, [batchId]);
+  return { deleted: ids.length };
+};
+
 const reorderOutline = async (batchId, orderedIds) => {
   for (let i = 0; i < orderedIds.length; i++) {
     await query(`UPDATE academy_batch_outline SET row_no=$1 WHERE id=$2 AND batch_id=$3`, [i + 1, orderedIds[i], batchId]);
@@ -900,7 +912,7 @@ module.exports = {
   getPlanSubjects, createSubject, updateSubject, deleteSubject, importSubject,
   saveLectures,
   getBatches, createBatch, updateBatch, deleteBatch,
-  getBatchOutline, addOutlineRow, bulkAddOutlineRows, updateOutlineRow, deleteOutlineRow, reorderOutline,
+  getBatchOutline, addOutlineRow, bulkAddOutlineRows, updateOutlineRow, deleteOutlineRow, clearBatchOutline, reorderOutline,
   submitFeedback, getPendingFeedbacks, approveFeedback,
   getTeacherPaymentSummary, getTeacherPaymentDetails,
   createTeacherPaymentTransaction, getTeacherPaymentTransactions,

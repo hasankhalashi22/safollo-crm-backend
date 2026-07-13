@@ -59,6 +59,7 @@ router.get('/batches/:batchId/outline', c.getBatchOutline);
 router.post('/batches/:batchId/outline', c.addOutlineRow);
 router.post('/batches/:batchId/outline/bulk', c.bulkAddOutlineRows);
 router.put('/batches/:batchId/outline/reorder', c.reorderOutline);
+router.delete('/batches/:batchId/outline', c.clearBatchOutline);
 router.put('/outline/:id', c.updateOutlineRow);
 router.delete('/outline/:id', c.deleteOutlineRow);
 

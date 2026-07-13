@@ -56,6 +56,7 @@ exports.bulkAddOutlineRows = wrap(async (req) => { superAdminOnly(req); return s
 exports.updateOutlineRow   = wrap(async (req) => { superAdminOnly(req); return svc.updateOutlineRow(req.params.id, req.body, req.user.id); });
 exports.deleteOutlineRow   = wrap(async (req) => { superAdminOnly(req); return svc.deleteOutlineRow(req.params.id); });
 exports.reorderOutline     = wrap(async (req) => { superAdminOnly(req); return svc.reorderOutline(req.params.batchId, req.body.ordered_ids); });
+exports.clearBatchOutline  = wrap(async (req) => { superAdminOnly(req); return svc.clearBatchOutline(req.params.batchId); });
 
 // Feedback
 exports.submitFeedback    = wrap(async (req) => svc.submitFeedback(req.params.outlineId, req.body.teacher_id, req.body.note));
