@@ -24,9 +24,10 @@ exports.register = wrap(async (req) => svc.teacherRegister(req.body));
 exports.login    = wrap(async (req) => svc.teacherLogin(req.body));
 
 // ── Teacher protected ─────────────────────────────────────────────────────────
-exports.getMyProfile  = wrap(async (req) => svc.getMyProfile(req.teacher.id));
-exports.getMyClasses  = wrap(async (req) => svc.getMyClasses(req.teacher.id));
-exports.getMyPayments = wrap(async (req) => svc.getMyPayments(req.teacher.id));
+exports.getMyProfile             = wrap(async (req) => svc.getMyProfile(req.teacher.id));
+exports.getMyClasses             = wrap(async (req) => svc.getMyClasses(req.teacher.id));
+exports.getMyPayments            = wrap(async (req) => svc.getMyPayments(req.teacher.id));
+exports.getMyPaymentTransactions = wrap(async (req) => academySvc.getTeacherPaymentTransactions(req.teacher.id));
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 exports.getCoursesWithSubjects = wrap(async (req) => svc.getCoursesWithSubjects());

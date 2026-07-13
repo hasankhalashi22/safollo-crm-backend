@@ -536,6 +536,32 @@ const approveFeedback = async (feedbackId, adminId, approved) => {
   return { success: true, status: newStatus };
 };
 
+// ── Teacher Payment Transactions ─────────────────────────────────────────────
+const createTeacherPaymentTransaction = async ({ teacher_id, amount, proof_url, transaction_date, note, accounting_transaction_id, created_by }) => {
+  const r = await query(
+    `INSERT INTO academy_teacher_payment_transactions (teacher_id, amount, proof_url, transaction_date, note, accounting_transaction_id, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [teacher_id, amount, proof_url || null, transaction_date || new Date().toISOString().split('T')[0], note || null, accounting_transaction_id || null, created_by || null]
+  );
+  return r.rows[0];
+};
+
+const getTeacherPaymentTransactions = async (teacher_id) => {
+  const [txR, dueR] = await Promise.all([
+    query(
+      `SELECT * FROM academy_teacher_payment_transactions WHERE teacher_id=$1 ORDER BY transaction_date DESC, created_at DESC`,
+      [teacher_id]
+    ),
+    query(
+      `SELECT COALESCE(SUM(amount),0) AS total_due FROM academy_teacher_payments WHERE teacher_id=$1`,
+      [teacher_id]
+    ),
+  ]);
+  const total_due = parseFloat(dueR.rows[0].total_due);
+  const total_paid = txR.rows.reduce((s, r) => s + parseFloat(r.amount), 0);
+  return { transactions: txR.rows, total_due, total_paid, remaining: total_due - total_paid };
+};
+
 // ── Teacher Payments ──────────────────────────────────────────────────────────
 const getTeacherPayments = async (teacherId) => {
   const params = teacherId ? [teacherId] : [];
@@ -720,6 +746,7 @@ module.exports = {
   getBatches, createBatch, updateBatch, deleteBatch,
   getBatchOutline, addOutlineRow, bulkAddOutlineRows, updateOutlineRow, deleteOutlineRow, reorderOutline,
   submitFeedback, getPendingFeedbacks, approveFeedback,
+  createTeacherPaymentTransaction, getTeacherPaymentTransactions,
   getTeacherPayments, payTeacher, recalculatePayments,
   getScheduleReport,
   importPlanExcel, importSubjectExcel,

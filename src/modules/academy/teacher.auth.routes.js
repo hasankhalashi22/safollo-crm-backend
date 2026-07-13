@@ -11,7 +11,8 @@ router.get('/me',          c.authenticateTeacher, c.getMyProfile);
 router.put('/me',          c.authenticateTeacher, c.updateMyProfile);
 router.get('/courses',     c.authenticateTeacher, c.getCoursesWithSubjects);
 router.get('/classes',     c.authenticateTeacher, c.getMyClasses);
-router.get('/payments',    c.authenticateTeacher, c.getMyPayments);
+router.get('/payments',             c.authenticateTeacher, c.getMyPayments);
+router.get('/payment-transactions', c.authenticateTeacher, c.getMyPaymentTransactions);
 router.post('/outline/:outlineId/feedback', c.authenticateTeacher, c.submitFeedback);
 
 // ── Admin: manage teacher accounts ───────────────────────────────────────────
