@@ -68,6 +68,8 @@ router.get('/feedbacks/pending', c.getPendingFeedbacks);
 router.post('/feedbacks/:id/approve', c.approveFeedback);
 
 // Teacher Payments
+router.get('/teacher-payment-summary', c.getTeacherPaymentSummary);
+router.get('/teacher-payment-details/:teacherId', c.getTeacherPaymentDetails);
 router.get('/teacher-payments', c.getTeacherPayments);
 router.post('/teacher-payments/pay', c.payTeacher);
 router.post('/teacher-payments/recalculate', c.recalculatePayments);

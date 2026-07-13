@@ -63,6 +63,8 @@ exports.getPendingFeedbacks = wrap(async (req) => svc.getPendingFeedbacks());
 exports.approveFeedback   = wrap(async (req) => { superAdminOnly(req); return svc.approveFeedback(req.params.id, req.user.id, req.body.approved); });
 
 // Teacher Payments
+exports.getTeacherPaymentSummary      = wrap(async (req) => svc.getTeacherPaymentSummary());
+exports.getTeacherPaymentDetails      = wrap(async (req) => svc.getTeacherPaymentDetails(req.params.teacherId));
 exports.getTeacherPayments            = wrap(async (req) => svc.getTeacherPayments(req.query.teacher_id || null));
 exports.payTeacher                    = wrap(async (req) => { superAdminOnly(req); return svc.payTeacher({ ...req.body, paid_by: req.user.id }); });
 exports.recalculatePayments           = wrap(async (req) => { superAdminOnly(req); return svc.recalculatePayments(); });

@@ -536,6 +536,47 @@ const approveFeedback = async (feedbackId, adminId, approved) => {
   return { success: true, status: newStatus };
 };
 
+// ── Teacher Payment Summary & Details ────────────────────────────────────────
+const getTeacherPaymentSummary = async () => {
+  const r = await query(`
+    SELECT
+      t.id, t.full_name, t.teacher_code, t.teacher_category,
+      COUNT(tp.id)::int AS total_classes,
+      COALESCE(SUM(tp.amount), 0) AS total_due,
+      COALESCE((SELECT SUM(amount) FROM academy_teacher_payment_transactions WHERE teacher_id = t.id), 0) AS total_paid
+    FROM academy_teachers t
+    LEFT JOIN academy_teacher_payments tp ON tp.teacher_id = t.id
+    GROUP BY t.id, t.full_name, t.teacher_code, t.teacher_category
+    ORDER BY t.full_name
+  `);
+  return r.rows.map(row => ({
+    ...row,
+    total_due: parseFloat(row.total_due),
+    total_paid: parseFloat(row.total_paid),
+    remaining: parseFloat(row.total_due) - parseFloat(row.total_paid),
+  }));
+};
+
+const getTeacherPaymentDetails = async (teacherId) => {
+  const [classR, txR] = await Promise.all([
+    query(`
+      SELECT tp.id, tp.amount, bo.topic, bo.scheduled_date, bo.class_no, bo.class_mode, bo.row_type, bo.subject_name, b.batch_name
+      FROM academy_teacher_payments tp
+      LEFT JOIN academy_batch_outline bo ON bo.id = tp.outline_id
+      LEFT JOIN academy_batches b ON b.id = tp.batch_id
+      WHERE tp.teacher_id = $1
+      ORDER BY bo.scheduled_date DESC NULLS LAST
+    `, [teacherId]),
+    query(
+      `SELECT * FROM academy_teacher_payment_transactions WHERE teacher_id=$1 ORDER BY transaction_date DESC, created_at DESC`,
+      [teacherId]
+    ),
+  ]);
+  const total_due = classR.rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  const total_paid = txR.rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  return { class_history: classR.rows, payment_history: txR.rows, total_due, total_paid, remaining: total_due - total_paid };
+};
+
 // ── Teacher Payment Transactions ─────────────────────────────────────────────
 const createTeacherPaymentTransaction = async ({ teacher_id, amount, proof_url, transaction_date, note, accounting_transaction_id, created_by }) => {
   const r = await query(
@@ -746,6 +787,7 @@ module.exports = {
   getBatches, createBatch, updateBatch, deleteBatch,
   getBatchOutline, addOutlineRow, bulkAddOutlineRows, updateOutlineRow, deleteOutlineRow, reorderOutline,
   submitFeedback, getPendingFeedbacks, approveFeedback,
+  getTeacherPaymentSummary, getTeacherPaymentDetails,
   createTeacherPaymentTransaction, getTeacherPaymentTransactions,
   getTeacherPayments, payTeacher, recalculatePayments,
   getScheduleReport,
