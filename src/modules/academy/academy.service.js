@@ -255,7 +255,21 @@ const deleteSubject = async (id) => {
   await query(`DELETE FROM academy_plan_subjects WHERE id=$1`, [id]);
   return { deleted: true };
 };
-// import a single subject (locked, synced to source)
+const copyLectures = async (sourceSubjectId, newSubjectId) => {
+  const lectures = await query(
+    `SELECT * FROM academy_plan_lectures WHERE subject_id=$1 ORDER BY serial_no`,
+    [sourceSubjectId]
+  );
+  for (const lec of lectures.rows) {
+    await query(
+      `INSERT INTO academy_plan_lectures (subject_id, serial_no, lecture_no, title, details, duration_min, is_practical)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [newSubjectId, lec.serial_no, lec.lecture_no, lec.title, lec.details, lec.duration_min, lec.is_practical]
+    );
+  }
+};
+
+// import a single subject with lectures (locked, synced to source)
 const importSubject = async (planId, sourceSubjectId) => {
   const srcR = await query(`SELECT * FROM academy_plan_subjects WHERE id=$1`, [sourceSubjectId]);
   if (!srcR.rows.length) throw { statusCode: 404, message: 'Source subject পাওয়া যায়নি' };
@@ -266,10 +280,11 @@ const importSubject = async (planId, sourceSubjectId) => {
     `INSERT INTO academy_plan_subjects (plan_id, serial_no, subject_name, source_subject_id) VALUES ($1,$2,$3,$4) RETURNING *`,
     [planId, serial_no, src.subject_name, sourceSubjectId]
   );
+  await copyLectures(sourceSubjectId, r.rows[0].id);
   return r.rows[0];
 };
 
-// import all subjects from a source plan (locked, synced to source)
+// import all subjects with lectures from a source plan (locked, synced to source)
 const importPlanSubjects = async (targetPlanId, sourcePlanId) => {
   const srcSubjects = await query(
     `SELECT * FROM academy_plan_subjects WHERE plan_id=$1 ORDER BY serial_no`,
@@ -284,6 +299,7 @@ const importPlanSubjects = async (targetPlanId, sourcePlanId) => {
       `INSERT INTO academy_plan_subjects (plan_id, serial_no, subject_name, source_subject_id) VALUES ($1,$2,$3,$4) RETURNING *`,
       [targetPlanId, serial_no, src.subject_name, src.id]
     );
+    await copyLectures(src.id, r.rows[0].id);
     inserted.push(r.rows[0]);
   }
   return { imported: inserted.length };
