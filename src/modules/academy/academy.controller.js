@@ -73,6 +73,10 @@ exports.createTeacherPaymentTransaction = wrap(async (req) => { superAdminOnly(r
 // Reports
 exports.getScheduleReport = wrap(async (req) => svc.getScheduleReport(req.query));
 
+// Academy Settings
+exports.getAcademySettings  = wrap(async (req) => svc.getAcademySettings());
+exports.updateAcademySettings = wrap(async (req) => { superAdminOnly(req); return svc.updateAcademySettings(req.body); });
+
 // Excel Import
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });

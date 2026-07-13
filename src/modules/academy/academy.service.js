@@ -1,5 +1,6 @@
 const { query } = require('../../config/database');
 const XLSX = require('xlsx');
+const transactionsService = require('../accounting/transactions.service');
 
 // ── Zoom Accounts ─────────────────────────────────────────────────────────────
 const getZoomAccounts = async () => {
@@ -529,6 +530,24 @@ const approveFeedback = async (feedbackId, adminId, approved) => {
             [teacherId, cf.outline_id, outline.batch_id,
              outline.scheduled_date, outline.class_type || 'regular', amount]
           );
+
+          if (amount > 0) {
+            const settings = await getAcademySettings();
+            if (settings.teacher_expense_account_id && settings.teacher_payable_account_id) {
+              const teacherNameR = await query(`SELECT full_name FROM academy_teachers WHERE id=$1`, [teacherId]);
+              const teacherName = teacherNameR.rows[0]?.full_name || '';
+              const classDate = outline.scheduled_date?.split?.('T')[0] || new Date().toISOString().split('T')[0];
+              await transactionsService.createTransaction({
+                transaction_date: classDate,
+                transaction_type: 'expense',
+                description: `Teacher Payable - ${teacherName} (${classDate})`,
+                amount,
+                debit_account_id: settings.teacher_expense_account_id,
+                credit_account_id: settings.teacher_payable_account_id,
+                teacher_id: teacherId,
+              }, adminId, null);
+            }
+          }
         }
       }
     }
@@ -776,6 +795,24 @@ const importSubjectExcel = async (subjectId, buffer) => {
   return { imported: dataRows.length };
 };
 
+// ── Academy Settings ─────────────────────────────────────────────────────────
+const getAcademySettings = async () => {
+  const r = await query(`SELECT * FROM academy_settings WHERE id = 1`);
+  return r.rows[0] || {};
+};
+
+const updateAcademySettings = async (data) => {
+  const { teacher_expense_account_id, teacher_payable_account_id } = data;
+  await query(
+    `INSERT INTO academy_settings (id, teacher_expense_account_id, teacher_payable_account_id)
+     VALUES (1, $1, $2)
+     ON CONFLICT (id) DO UPDATE
+     SET teacher_expense_account_id=$1, teacher_payable_account_id=$2, updated_at=NOW()`,
+    [teacher_expense_account_id || null, teacher_payable_account_id || null]
+  );
+  return getAcademySettings();
+};
+
 module.exports = {
   getZoomAccounts, createZoomAccount, updateZoomAccount, deleteZoomAccount,
   getPaymentRates, upsertPaymentRate, deletePaymentRate, deleteCourseTypeRates,
@@ -792,4 +829,5 @@ module.exports = {
   getTeacherPayments, payTeacher, recalculatePayments,
   getScheduleReport,
   importPlanExcel, importSubjectExcel,
+  getAcademySettings, updateAcademySettings,
 };

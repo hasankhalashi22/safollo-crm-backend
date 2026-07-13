@@ -78,4 +78,8 @@ router.post('/teacher-payment-transactions', c.createTeacherPaymentTransaction);
 // Reports
 router.get('/reports/schedule', c.getScheduleReport);
 
+// Academy Settings
+router.get('/settings', c.getAcademySettings);
+router.put('/settings', c.updateAcademySettings);
+
 module.exports = router;
