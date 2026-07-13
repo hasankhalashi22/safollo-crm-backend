@@ -243,6 +243,11 @@ const updateSubject = async (id, { subject_name }) => {
     `UPDATE academy_plan_subjects SET subject_name=$1 WHERE id=$2 RETURNING *`,
     [subject_name, id]
   );
+  // propagate to linked follower subjects
+  await query(
+    `UPDATE academy_plan_subjects SET subject_name=$1 WHERE source_subject_id=$2`,
+    [subject_name, id]
+  );
   return r.rows[0];
 };
 const deleteSubject = async (id) => {
@@ -250,20 +255,38 @@ const deleteSubject = async (id) => {
   await query(`DELETE FROM academy_plan_subjects WHERE id=$1`, [id]);
   return { deleted: true };
 };
+// import a single subject (locked, synced to source)
 const importSubject = async (planId, sourceSubjectId) => {
   const srcR = await query(`SELECT * FROM academy_plan_subjects WHERE id=$1`, [sourceSubjectId]);
   if (!srcR.rows.length) throw { statusCode: 404, message: 'Source subject পাওয়া যায়নি' };
   const src = srcR.rows[0];
-  const newSub = await createSubject(planId, { subject_name: src.subject_name + ' (copied)' });
-  const lectures = await query(`SELECT * FROM academy_plan_lectures WHERE subject_id=$1 ORDER BY serial_no`, [sourceSubjectId]);
-  for (const lec of lectures.rows) {
-    await query(
-      `INSERT INTO academy_plan_lectures (subject_id, serial_no, lecture_no, title, duration_min, is_practical)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [newSub.id, lec.serial_no, lec.lecture_no, lec.title, lec.duration_min, lec.is_practical]
+  const countR = await query(`SELECT COALESCE(MAX(serial_no), 0) AS mx FROM academy_plan_subjects WHERE plan_id=$1`, [planId]);
+  const serial_no = parseInt(countR.rows[0].mx) + 1;
+  const r = await query(
+    `INSERT INTO academy_plan_subjects (plan_id, serial_no, subject_name, source_subject_id) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [planId, serial_no, src.subject_name, sourceSubjectId]
+  );
+  return r.rows[0];
+};
+
+// import all subjects from a source plan (locked, synced to source)
+const importPlanSubjects = async (targetPlanId, sourcePlanId) => {
+  const srcSubjects = await query(
+    `SELECT * FROM academy_plan_subjects WHERE plan_id=$1 ORDER BY serial_no`,
+    [sourcePlanId]
+  );
+  const countR = await query(`SELECT COALESCE(MAX(serial_no), 0) AS mx FROM academy_plan_subjects WHERE plan_id=$1`, [targetPlanId]);
+  let serial_no = parseInt(countR.rows[0].mx);
+  const inserted = [];
+  for (const src of srcSubjects.rows) {
+    serial_no++;
+    const r = await query(
+      `INSERT INTO academy_plan_subjects (plan_id, serial_no, subject_name, source_subject_id) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [targetPlanId, serial_no, src.subject_name, src.id]
     );
+    inserted.push(r.rows[0]);
   }
-  return newSub;
+  return { imported: inserted.length };
 };
 
 // ── Plan Lectures ─────────────────────────────────────────────────────────────
@@ -909,7 +932,7 @@ module.exports = {
   getTeachers, getTeacher, createTeacher, updateTeacher, deleteTeacher, getTeacherHistory,
   getCourses, createCourse, updateCourse, deleteCourse,
   getCoursePlans, createPlan, updatePlan, deletePlan,
-  getPlanSubjects, createSubject, updateSubject, deleteSubject, importSubject,
+  getPlanSubjects, createSubject, updateSubject, deleteSubject, importSubject, importPlanSubjects,
   saveLectures,
   getBatches, createBatch, updateBatch, deleteBatch,
   getBatchOutline, addOutlineRow, bulkAddOutlineRows, updateOutlineRow, deleteOutlineRow, clearBatchOutline, reorderOutline,

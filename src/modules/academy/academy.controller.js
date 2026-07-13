@@ -40,7 +40,8 @@ exports.getPlanSubjects  = wrap(async (req) => svc.getPlanSubjects(req.params.pl
 exports.createSubject    = wrap(async (req) => { superAdminOnly(req); return svc.createSubject(req.params.planId, req.body); });
 exports.updateSubject    = wrap(async (req) => { superAdminOnly(req); return svc.updateSubject(req.params.id, req.body); });
 exports.deleteSubject    = wrap(async (req) => { superAdminOnly(req); return svc.deleteSubject(req.params.id); });
-exports.importSubject    = wrap(async (req) => { superAdminOnly(req); return svc.importSubject(req.params.planId, req.body.source_subject_id); });
+exports.importSubject      = wrap(async (req) => { superAdminOnly(req); return svc.importSubject(req.params.planId, req.body.source_subject_id); });
+exports.importPlanSubjects = wrap(async (req) => { superAdminOnly(req); return svc.importPlanSubjects(req.params.planId, req.body.source_plan_id); });
 exports.saveLectures     = wrap(async (req) => { superAdminOnly(req); return svc.saveLectures(req.params.subjectId, req.body.lectures); });
 
 // Batches

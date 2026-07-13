@@ -40,6 +40,7 @@ router.delete('/plans/:id', c.deletePlan);
 router.get('/plans/:planId/subjects', c.getPlanSubjects);
 router.post('/plans/:planId/subjects', c.createSubject);
 router.post('/plans/:planId/subjects/import', c.importSubject);
+router.post('/plans/:planId/import-subjects', c.importPlanSubjects);
 router.put('/subjects/:id', c.updateSubject);
 router.delete('/subjects/:id', c.deleteSubject);
 router.put('/subjects/:subjectId/lectures', c.saveLectures);
