@@ -810,16 +810,23 @@ const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue
   );
   const all = sourceR.rows;
 
-  // split by cutoff
-  let before = [], from = [];
+  // find cutoff row_no — split by position so exams follow their adjacent class
+  let cutoffRowNo = null;
   if (cutoffType === 'class_no') {
     const n = parseInt(cutoffValue);
-    before = all.filter(r => r.class_no !== null && r.class_no < n);
-    from   = all.filter(r => r.class_no === null || r.class_no >= n);
+    const pivot = all.find(r => r.row_type === 'class' && r.class_no !== null && parseInt(r.class_no) >= n);
+    cutoffRowNo = pivot ? pivot.row_no : null;
   } else {
-    // date cutoff
-    before = all.filter(r => r.scheduled_date && r.scheduled_date < cutoffValue);
-    from   = all.filter(r => !r.scheduled_date || r.scheduled_date >= cutoffValue);
+    const pivot = all.find(r => r.scheduled_date && r.scheduled_date >= cutoffValue);
+    cutoffRowNo = pivot ? pivot.row_no : null;
+  }
+
+  let before = [], from = [];
+  if (cutoffRowNo === null) {
+    before = all; from = [];
+  } else {
+    before = all.filter(r => r.row_no < cutoffRowNo);
+    from   = all.filter(r => r.row_no >= cutoffRowNo);
   }
 
   // ordered list: from cutoff first, then before cutoff
