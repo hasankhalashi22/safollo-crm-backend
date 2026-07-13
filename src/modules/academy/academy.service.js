@@ -873,12 +873,16 @@ const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue
   let all = sourceR.rows;
 
   // partial subject filter: keep only selected subjects' classes + regular exams (no revision)
+  const matchesSubject = (rowSubjectName) => {
+    if (!rowSubjectName) return true;
+    return selectedSubjects.some(s => rowSubjectName === s || rowSubjectName.startsWith(s + '-'));
+  };
   if (isPartial) {
     all = all.filter(r => {
-      if (r.row_type === 'class') return !r.subject_name || selectedSubjects.includes(r.subject_name);
+      if (r.row_type === 'class') return matchesSubject(r.subject_name);
       if (r.row_type === 'exam') {
         if (r.label === 'রিভিশন') return false;
-        return !r.subject_name || selectedSubjects.includes(r.subject_name);
+        return matchesSubject(r.subject_name);
       }
       return true;
     });
