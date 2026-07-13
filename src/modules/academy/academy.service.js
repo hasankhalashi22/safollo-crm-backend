@@ -440,6 +440,15 @@ const updateOutlineRow = async (id, data, updatedBy) => {
      location ?? old.location, subject_name ?? old.subject_name,
      is_active ?? old.is_active ?? true, id]
   );
+
+  // propagate content changes to follower rows linked to this source row
+  await query(
+    `UPDATE academy_batch_outline
+     SET topic=$1, subject_name=$2, notes=$3, updated_at=NOW()
+     WHERE source_outline_id=$4`,
+    [topic ?? old.topic, subject_name ?? old.subject_name, notes ?? old.notes, id]
+  );
+
   return r.rows[0];
 };
 
@@ -845,17 +854,19 @@ const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue
     rowNo++;
     const newClassNo = r.row_type === 'class' && r.class_no !== null ? classSeq++ : null;
     const newExamNo  = r.row_type === 'exam'  && r.exam_no  !== null ? examSeq++  : null;
+    // rows from cutoff onwards are synced (frozen in follower); before-cutoff rows are free
+    const sourceOutlineId = r.row_no >= cutoffRowNo ? r.id : null;
     await query(
       `INSERT INTO academy_batch_outline
          (batch_id, row_no, row_type, label, class_no, exam_no, topic, scheduled_date, scheduled_time,
           class_type, teacher_id, zoom_link, notes, zoom_account_id, class_mode, location,
-          subject_name, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'scheduled')`,
+          subject_name, status, source_outline_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'scheduled',$18)`,
       [targetBatchId, rowNo, r.row_type, r.label || null, newClassNo, newExamNo,
        r.topic || null, r.scheduled_date || null, r.scheduled_time || null,
        r.class_type || 'regular', r.teacher_id || null, r.zoom_link || null, r.notes || null,
        r.zoom_account_id || null, r.class_mode || 'online', r.location || null,
-       r.subject_name || null]
+       r.subject_name || null, sourceOutlineId]
     );
   }
 
