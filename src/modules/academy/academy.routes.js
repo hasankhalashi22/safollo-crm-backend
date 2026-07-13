@@ -82,4 +82,7 @@ router.get('/reports/schedule', c.getScheduleReport);
 router.get('/settings', c.getAcademySettings);
 router.put('/settings', c.updateAcademySettings);
 
+// Follow Batch
+router.post('/batches/:batchId/follow', c.followBatch);
+
 module.exports = router;

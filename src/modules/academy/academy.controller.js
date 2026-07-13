@@ -74,8 +74,15 @@ exports.createTeacherPaymentTransaction = wrap(async (req) => { superAdminOnly(r
 exports.getScheduleReport = wrap(async (req) => svc.getScheduleReport(req.query));
 
 // Academy Settings
-exports.getAcademySettings  = wrap(async (req) => svc.getAcademySettings());
+exports.getAcademySettings    = wrap(async (req) => svc.getAcademySettings());
 exports.updateAcademySettings = wrap(async (req) => { superAdminOnly(req); return svc.updateAcademySettings(req.body); });
+
+// Follow Batch
+exports.followBatch = wrap(async (req) => {
+  superAdminOnly(req);
+  const { source_batch_id, cutoff_type, cutoff_value } = req.body;
+  return svc.followBatch(req.params.batchId, source_batch_id, cutoff_type, cutoff_value);
+});
 
 // Excel Import
 const multer = require('multer');

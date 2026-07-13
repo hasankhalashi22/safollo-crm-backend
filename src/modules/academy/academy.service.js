@@ -795,6 +795,63 @@ const importSubjectExcel = async (subjectId, buffer) => {
   return { imported: dataRows.length };
 };
 
+// ── Follow Batch ─────────────────────────────────────────────────────────────
+const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue) => {
+  // fetch all eligible rows from source batch
+  const sourceR = await query(
+    `SELECT * FROM academy_batch_outline
+     WHERE batch_id = $1
+       AND (
+         (row_type = 'class' AND (label IS NULL OR label = ''))
+         OR (row_type = 'exam' AND (label IS NULL OR label = '' OR label = 'রিভিশন'))
+       )
+     ORDER BY row_no ASC`,
+    [sourceBatchId]
+  );
+  const all = sourceR.rows;
+
+  // split by cutoff
+  let before = [], from = [];
+  if (cutoffType === 'class_no') {
+    const n = parseInt(cutoffValue);
+    before = all.filter(r => r.class_no !== null && r.class_no < n);
+    from   = all.filter(r => r.class_no === null || r.class_no >= n);
+  } else {
+    // date cutoff
+    before = all.filter(r => r.scheduled_date && r.scheduled_date < cutoffValue);
+    from   = all.filter(r => !r.scheduled_date || r.scheduled_date >= cutoffValue);
+  }
+
+  // ordered list: from cutoff first, then before cutoff
+  const ordered = [...from, ...before];
+  if (!ordered.length) return { imported: 0 };
+
+  // get current max row_no in target batch
+  const maxR = await query(
+    `SELECT COALESCE(MAX(row_no), 0) AS mx FROM academy_batch_outline WHERE batch_id = $1`,
+    [targetBatchId]
+  );
+  let rowNo = parseInt(maxR.rows[0].mx);
+
+  for (const r of ordered) {
+    rowNo++;
+    await query(
+      `INSERT INTO academy_batch_outline
+         (batch_id, row_no, row_type, label, class_no, exam_no, topic, scheduled_date, scheduled_time,
+          class_type, teacher_id, zoom_link, notes, zoom_account_id, class_mode, location,
+          subject_name, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'scheduled')`,
+      [targetBatchId, rowNo, r.row_type, r.label || null, r.class_no || null, r.exam_no || null,
+       r.topic || null, r.scheduled_date || null, r.scheduled_time || null,
+       r.class_type || 'regular', r.teacher_id || null, r.zoom_link || null, r.notes || null,
+       r.zoom_account_id || null, r.class_mode || 'online', r.location || null,
+       r.subject_name || null]
+    );
+  }
+
+  return { imported: ordered.length, from_cutoff: from.length, before_cutoff: before.length };
+};
+
 // ── Academy Settings ─────────────────────────────────────────────────────────
 const getAcademySettings = async () => {
   const r = await query(`SELECT * FROM academy_settings WHERE id = 1`);
@@ -830,4 +887,5 @@ module.exports = {
   getScheduleReport,
   importPlanExcel, importSubjectExcel,
   getAcademySettings, updateAcademySettings,
+  followBatch,
 };
