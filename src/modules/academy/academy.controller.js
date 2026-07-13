@@ -82,8 +82,8 @@ exports.updateAcademySettings = wrap(async (req) => { superAdminOnly(req); retur
 // Follow Batch
 exports.followBatch = wrap(async (req) => {
   superAdminOnly(req);
-  const { source_batch_id, cutoff_type, cutoff_value } = req.body;
-  return svc.followBatch(req.params.batchId, source_batch_id, cutoff_type, cutoff_value);
+  const { source_batch_id, cutoff_type, cutoff_value, selected_subjects } = req.body;
+  return svc.followBatch(req.params.batchId, source_batch_id, cutoff_type, cutoff_value, selected_subjects || null);
 });
 
 // Excel Import

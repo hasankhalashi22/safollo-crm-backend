@@ -856,7 +856,9 @@ const importSubjectExcel = async (subjectId, buffer) => {
 };
 
 // ── Follow Batch ─────────────────────────────────────────────────────────────
-const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue) => {
+const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue, selectedSubjects) => {
+  const isPartial = Array.isArray(selectedSubjects) && selectedSubjects.length > 0;
+
   // fetch all eligible rows from source batch
   const sourceR = await query(
     `SELECT * FROM academy_batch_outline
@@ -868,7 +870,19 @@ const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue
      ORDER BY row_no ASC`,
     [sourceBatchId]
   );
-  const all = sourceR.rows;
+  let all = sourceR.rows;
+
+  // partial subject filter: keep only selected subjects' classes + regular exams (no revision)
+  if (isPartial) {
+    all = all.filter(r => {
+      if (r.row_type === 'class') return !r.subject_name || selectedSubjects.includes(r.subject_name);
+      if (r.row_type === 'exam') {
+        if (r.label === 'রিভিশন') return false;
+        return !r.subject_name || selectedSubjects.includes(r.subject_name);
+      }
+      return true;
+    });
+  }
 
   // find cutoff row_no — split by position so exams follow their adjacent class
   let cutoffRowNo = null;
