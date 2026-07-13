@@ -839,16 +839,19 @@ const followBatch = async (targetBatchId, sourceBatchId, cutoffType, cutoffValue
     [targetBatchId]
   );
   let rowNo = parseInt(maxR.rows[0].mx);
+  let classSeq = 1, examSeq = 1;
 
   for (const r of ordered) {
     rowNo++;
+    const newClassNo = r.row_type === 'class' && r.class_no !== null ? classSeq++ : null;
+    const newExamNo  = r.row_type === 'exam'  && r.exam_no  !== null ? examSeq++  : null;
     await query(
       `INSERT INTO academy_batch_outline
          (batch_id, row_no, row_type, label, class_no, exam_no, topic, scheduled_date, scheduled_time,
           class_type, teacher_id, zoom_link, notes, zoom_account_id, class_mode, location,
           subject_name, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'scheduled')`,
-      [targetBatchId, rowNo, r.row_type, r.label || null, r.class_no || null, r.exam_no || null,
+      [targetBatchId, rowNo, r.row_type, r.label || null, newClassNo, newExamNo,
        r.topic || null, r.scheduled_date || null, r.scheduled_time || null,
        r.class_type || 'regular', r.teacher_id || null, r.zoom_link || null, r.notes || null,
        r.zoom_account_id || null, r.class_mode || 'online', r.location || null,
