@@ -32,9 +32,11 @@ const paymentStorage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: 'safollo-crm/payment-proofs',
-    allowed_formats: ['jpg', 'jpeg', 'png'],
+    allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+    resource_type: 'auto',
   },
 });
+const MAX_PROOF_SIZE = 1 * 1024 * 1024; // 1 MB
 
 // Storage for signatures
 const signatureStorage = new CloudinaryStorage({
@@ -58,7 +60,7 @@ const noticeStorage = new CloudinaryStorage({
 
 const uploadProfile   = multer({ storage: profileStorage });
 const uploadNid       = multer({ storage: nidStorage });
-const uploadPayment   = multer({ storage: paymentStorage });
+const uploadPayment   = multer({ storage: paymentStorage, limits: { fileSize: MAX_PROOF_SIZE } });
 const uploadSignature = multer({ storage: signatureStorage });
 const uploadNotice    = multer({ storage: noticeStorage });
 
