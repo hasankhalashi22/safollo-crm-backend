@@ -86,9 +86,9 @@ router.post('/teacher-payment-transactions',        editorUp,  c.createTeacherPa
 // Reports
 router.get('/reports/schedule', anyRole, c.getScheduleReport);
 
-// Academy Settings — admin only
-router.get('/settings', adminOnly, c.getAcademySettings);
-router.put('/settings', adminOnly, c.updateAcademySettings);
+// Academy Settings — super_admin only
+router.get('/settings', superOnly, c.getAcademySettings);
+router.put('/settings', superOnly, c.updateAcademySettings);
 
 // Follow Batch — any authenticated user
 router.post('/batches/:batchId/follow', c.followBatch);
