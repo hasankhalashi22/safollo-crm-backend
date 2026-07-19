@@ -119,6 +119,8 @@ const approveSale = async (enrollmentId, approverId, approverName, editData) => 
     if (editData?.course_price) fields.push(`course_price = ${parseFloat(editData.course_price)}`);
     if (editData?.reference !== undefined) fields.push(`reference = '${editData.reference}'`);
     if (editData?.notes !== undefined) fields.push(`notes = '${editData.notes}'`);
+    if (editData?.sale_date) fields.push(`created_at = '${editData.sale_date}'`);
+    if (editData?.course_id) fields.push(`course_id = ${parseInt(editData.course_id)}`);
 
     const result = await client.query(
       `UPDATE enrollments SET ${fields.join(', ')} WHERE id = $1 RETURNING *`,
