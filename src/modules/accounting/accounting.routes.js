@@ -51,7 +51,47 @@ router.get('/journal', accountsController.getGeneralJournal);
 router.post('/backfill-payments', async (req, res, next) => {
   try {
     const result = await backfillMissingPayments(req.user.id);
-    res.json({ success: true, ...result, message: `${result.synced}টি payment sync হয়েছে` });
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+});
+
+router.post('/resync-edited-payments', async (req, res, next) => {
+  try {
+    const { query, withTransaction } = require('../../config/database');
+    const { syncPaymentToAccounting, removeSyncedTransaction } = require('./sync.service');
+
+    // Find payments where accounting amount differs from actual payment amount
+    const mismatch = await query(`
+      SELECT p.id as payment_id, p.amount as actual_amount,
+             t.amount as synced_amount, p.enrollment_id,
+             p.payment_method, p.is_due_payment, p.created_at,
+             p.transaction_id, p.payment_proof_url, p.sender_number
+      FROM payments p
+      JOIN acc_transactions t ON t.payment_id = p.id
+      WHERE ABS(p.amount - t.amount) > 0.01
+        AND p.approval_status = 'approved'
+    `);
+
+    let fixed = 0;
+    const errors = [];
+    for (const row of mismatch.rows) {
+      try {
+        await removeSyncedTransaction(row.payment_id);
+        await syncPaymentToAccounting(
+          { id: row.payment_id, amount: row.actual_amount, payment_method: row.payment_method,
+            is_due_payment: row.is_due_payment, created_at: row.created_at,
+            transaction_id: row.transaction_id, payment_proof_url: row.payment_proof_url,
+            sender_number: row.sender_number, approval_status: 'approved' },
+          row.enrollment_id, req.user.id
+        );
+        fixed++;
+      } catch (e) {
+        errors.push({ payment_id: row.payment_id, error: e.message });
+      }
+    }
+
+    res.json({ success: true, total_mismatch: mismatch.rows.length, fixed, errors,
+      message: `${fixed}টি ভুল accounting entry ঠিক করা হয়েছে` });
   } catch (err) { next(err); }
 });
 
