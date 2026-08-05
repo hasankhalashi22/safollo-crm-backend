@@ -41,8 +41,9 @@ const updatePaymentAmount = async (paymentId, newAmount, updatedBy) => {
       [oldAmount, newAmount, payment.enrollment_id]
     );
 
-    // Re-sync accounting if payment was approved
-    if (payment.approval_status === 'approved') {
+    // Re-sync accounting (always re-sync if a transaction already existed, or if approved)
+    const hadSync = await client.query('SELECT id FROM acc_transactions WHERE payment_id = $1', [paymentId]);
+    if (payment.approval_status === 'approved' || hadSync.rows.length > 0) {
       await removeSyncedTransaction(paymentId);
       const updated = { ...payment, amount: newAmount };
       await syncPaymentToAccounting(updated, payment.enrollment_id, updatedBy);
@@ -71,8 +72,9 @@ const updatePaymentMethod = async (paymentId, newMethod, updatedBy) => {
 
     await client.query(`UPDATE payments SET payment_method = $1 WHERE id = $2`, [newMethod, paymentId]);
 
-    // Re-sync accounting if payment was approved
-    if (payment.approval_status === 'approved') {
+    // Re-sync accounting
+    const hadSync = await client.query('SELECT id FROM acc_transactions WHERE payment_id = $1', [paymentId]);
+    if (payment.approval_status === 'approved' || hadSync.rows.length > 0) {
       await removeSyncedTransaction(paymentId);
       const updated = { ...payment, payment_method: newMethod };
       await syncPaymentToAccounting(updated, payment.enrollment_id, updatedBy);
