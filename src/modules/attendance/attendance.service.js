@@ -111,35 +111,21 @@ const breakIn = async (employeeId, breakRecordId) => {
   return updated.rows[0];
 };
 
-const checkOut = async (employeeId) => {
-  const today = new Date().toISOString().split('T')[0];
-  const attResult = await query('SELECT * FROM hr_attendance WHERE employee_id = $1 AND date = $2', [employeeId, today]);
-  if (attResult.rows.length === 0 || !attResult.rows[0].check_in_time) {
-    throw { statusCode: 400, message: 'আগে check-in করুন' };
-  }
-  if (attResult.rows[0].check_out_time) {
-    throw { statusCode: 400, message: 'আজকে ইতিমধ্যে check-out করা হয়েছে' };
-  }
-  const attendance = attResult.rows[0];
-
-  const openBreak = await query(
-    `SELECT * FROM hr_attendance_breaks WHERE attendance_id = $1 AND break_out_time IS NOT NULL AND break_in_time IS NULL`,
-    [attendance.id]
+const getBreakExcessMinutes = async (attendanceId) => {
+  const breaksResult = await query(
+    `SELECT COALESCE(SUM(excess_minutes), 0) as total_excess FROM hr_attendance_breaks WHERE attendance_id = $1`,
+    [attendanceId]
   );
-  if (openBreak.rows.length > 0) throw { statusCode: 400, message: 'আগে চলমান break শেষ করুন' };
+  return parseFloat(breaksResult.rows[0].total_excess) || 0;
+};
 
+// Pure calculation shared by the manual ESS check-out button and device-punch reconciliation.
+// checkInTime/checkOutTime are explicit Date objects (not NOW()) so callers can pass a past punch timestamp.
+const computeCheckoutMetrics = async (employeeId, checkInTime, checkOutTime, breakExcessMinutes) => {
   const empResult = await query('SELECT office_start_time, office_end_time FROM hr_employees WHERE id = $1', [employeeId]);
   const emp = empResult.rows[0];
 
-  const now = new Date();
-  const checkInTime = new Date(attendance.check_in_time);
-  const totalMinutesPresent = (now - checkInTime) / 60000;
-
-  const breaksResult = await query(
-    `SELECT COALESCE(SUM(excess_minutes), 0) as total_excess FROM hr_attendance_breaks WHERE attendance_id = $1`,
-    [attendance.id]
-  );
-  const breakExcessMinutes = parseFloat(breaksResult.rows[0].total_excess) || 0;
+  const totalMinutesPresent = (checkOutTime - checkInTime) / 60000;
 
   let lateMinutes = 0;
   let isLate = false;
@@ -157,10 +143,10 @@ const checkOut = async (employeeId) => {
   let isEarlyLeave = false;
   if (emp?.office_end_time) {
     const [h, m] = emp.office_end_time.split(':').map(Number);
-    const expectedEnd = new Date(now);
+    const expectedEnd = new Date(checkOutTime);
     expectedEnd.setHours(h, m, 0, 0);
-    if (now < expectedEnd) {
-      earlyMinutes = (expectedEnd - now) / 60000;
+    if (checkOutTime < expectedEnd) {
+      earlyMinutes = (expectedEnd - checkOutTime) / 60000;
       isEarlyLeave = earlyMinutes > 0;
     }
   }
@@ -172,15 +158,80 @@ const checkOut = async (employeeId) => {
 
   const workingHours = (totalMinutesPresent - breakExcessMinutes) / 60;
 
+  return {
+    workingHours: workingHours.toFixed(2),
+    isLate, lateByMinutes: Math.round(lateMinutes),
+    isEarlyLeave, earlyByMinutes: Math.round(earlyMinutes),
+    totalDeficitMinutes: totalDeficitMinutes.toFixed(1),
+    penaltyAmount,
+  };
+};
+
+const saveCheckout = async (employeeId, date, checkOutTime, metrics) => {
   const result = await query(
     `UPDATE hr_attendance SET
-       check_out_time = NOW(), working_hours = $1, is_late = $2, late_by_minutes = $3,
-       is_early_leave = $4, early_by_minutes = $5, total_deficit_minutes = $6, penalty_amount = $7
-     WHERE employee_id = $8 AND date = $9 RETURNING *`,
-    [workingHours.toFixed(2), isLate, Math.round(lateMinutes), isEarlyLeave, Math.round(earlyMinutes),
-     totalDeficitMinutes.toFixed(1), penaltyAmount, employeeId, today]
+       check_out_time = $1, working_hours = $2, is_late = $3, late_by_minutes = $4,
+       is_early_leave = $5, early_by_minutes = $6, total_deficit_minutes = $7, penalty_amount = $8
+     WHERE employee_id = $9 AND date = $10 RETURNING *`,
+    [checkOutTime, metrics.workingHours, metrics.isLate, metrics.lateByMinutes,
+     metrics.isEarlyLeave, metrics.earlyByMinutes, metrics.totalDeficitMinutes, metrics.penaltyAmount,
+     employeeId, date]
   );
   return result.rows[0];
+};
+
+const checkOut = async (employeeId) => {
+  const today = new Date().toISOString().split('T')[0];
+  const attResult = await query('SELECT * FROM hr_attendance WHERE employee_id = $1 AND date = $2', [employeeId, today]);
+  if (attResult.rows.length === 0 || !attResult.rows[0].check_in_time) {
+    throw { statusCode: 400, message: 'আগে check-in করুন' };
+  }
+  if (attResult.rows[0].check_out_time) {
+    throw { statusCode: 400, message: 'আজকে ইতিমধ্যে check-out করা হয়েছে' };
+  }
+  const attendance = attResult.rows[0];
+
+  const openBreak = await query(
+    `SELECT * FROM hr_attendance_breaks WHERE attendance_id = $1 AND break_out_time IS NOT NULL AND break_in_time IS NULL`,
+    [attendance.id]
+  );
+  if (openBreak.rows.length > 0) throw { statusCode: 400, message: 'আগে চলমান break শেষ করুন' };
+
+  const now = new Date();
+  const checkInTime = new Date(attendance.check_in_time);
+  const breakExcessMinutes = await getBreakExcessMinutes(attendance.id);
+  const metrics = await computeCheckoutMetrics(employeeId, checkInTime, now, breakExcessMinutes);
+  return saveCheckout(employeeId, today, now, metrics);
+};
+
+// Reconciles one biometric device punch into hr_attendance: first punch of the day becomes
+// check-in, an earlier-than-stored punch corrects an out-of-order check-in, and any later punch
+// re-computes checkout metrics against it (last punch of the day wins as check-out).
+const reconcilePunch = async (employeeId, punchTime) => {
+  const date = punchTime.toISOString().split('T')[0];
+  const existing = await query('SELECT * FROM hr_attendance WHERE employee_id = $1 AND date = $2', [employeeId, date]);
+
+  if (existing.rows.length === 0 || !existing.rows[0].check_in_time) {
+    await query(
+      `INSERT INTO hr_attendance (employee_id, date, check_in_time, status)
+       VALUES ($1, $2, $3, 'present')
+       ON CONFLICT (employee_id, date) DO UPDATE SET check_in_time = $3, status = 'present'`,
+      [employeeId, date, punchTime]
+    );
+    return;
+  }
+
+  const attendance = existing.rows[0];
+  const checkInTime = new Date(attendance.check_in_time);
+
+  if (punchTime < checkInTime) {
+    await query(`UPDATE hr_attendance SET check_in_time = $1 WHERE id = $2`, [punchTime, attendance.id]);
+    return;
+  }
+
+  const breakExcessMinutes = await getBreakExcessMinutes(attendance.id);
+  const metrics = await computeCheckoutMetrics(employeeId, checkInTime, punchTime, breakExcessMinutes);
+  await saveCheckout(employeeId, date, punchTime, metrics);
 };
 
 const calculateDailyPenalty = async (employeeId, deficitMinutes, policy) => {
@@ -374,6 +425,130 @@ const decideWaiver = async (id, decision, decidedByEmployeeId) => {
   return result.rows[0];
 };
 
+// ===== Biometric Device Attendance Sync (ZKTeco ADMS) =====
+
+const getUnmappedPunches = async () => {
+  const result = await query(
+    `SELECT device_serial, device_pin, MAX(punch_time) as last_seen, COUNT(*) as punch_count
+     FROM hr_device_punches
+     WHERE employee_id IS NULL
+     GROUP BY device_serial, device_pin
+     ORDER BY last_seen DESC`
+  );
+  return result.rows;
+};
+
+const getDeviceMappings = async () => {
+  const result = await query(
+    `SELECT id, full_name, designation, device_user_id
+     FROM hr_employees
+     WHERE status IN ('active', 'on_leave')
+     ORDER BY full_name ASC`
+  );
+  return result.rows;
+};
+
+const assignDeviceMapping = async (employeeId, devicePin) => {
+  if (!devicePin) throw { statusCode: 400, message: 'Device PIN দিন' };
+
+  let result;
+  try {
+    result = await query(
+      `UPDATE hr_employees SET device_user_id = $1 WHERE id = $2 RETURNING *`,
+      [devicePin, employeeId]
+    );
+  } catch (err) {
+    if (err.code === '23505') throw { statusCode: 409, message: 'এই PIN ইতিমধ্যে অন্য কর্মীর সাথে assign করা আছে' };
+    throw err;
+  }
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'কর্মী পাওয়া যায়নি' };
+
+  // Reprocess any punches already logged under this PIN before it was mapped
+  const pending = await query(
+    `SELECT punch_time FROM hr_device_punches
+     WHERE device_pin = $1 AND (employee_id IS NULL OR employee_id = $2)
+     ORDER BY punch_time ASC`,
+    [devicePin, employeeId]
+  );
+  for (const row of pending.rows) {
+    try {
+      await reconcilePunch(employeeId, new Date(row.punch_time));
+      await query(
+        `UPDATE hr_device_punches SET employee_id = $1, processed = TRUE, process_error = NULL
+         WHERE device_pin = $2 AND punch_time = $3`,
+        [employeeId, devicePin, row.punch_time]
+      );
+    } catch (err) {
+      await query(
+        `UPDATE hr_device_punches SET employee_id = $1, process_error = $4
+         WHERE device_pin = $2 AND punch_time = $3`,
+        [employeeId, devicePin, row.punch_time, err.message]
+      );
+    }
+  }
+
+  return result.rows[0];
+};
+
+const clearDeviceMapping = async (employeeId) => {
+  const result = await query(
+    `UPDATE hr_employees SET device_user_id = NULL WHERE id = $1 RETURNING *`,
+    [employeeId]
+  );
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'কর্মী পাওয়া যায়নি' };
+  return result.rows[0];
+};
+
+const getRecentPunches = async ({ limit, employeeId } = {}) => {
+  const conditions = [];
+  const params = [];
+  let idx = 1;
+  if (employeeId) { conditions.push(`p.employee_id = $${idx++}`); params.push(employeeId); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  params.push(Math.min(parseInt(limit) || 100, 500));
+
+  const result = await query(
+    `SELECT p.*, he.full_name as employee_name
+     FROM hr_device_punches p
+     LEFT JOIN hr_employees he ON he.id = p.employee_id
+     ${where}
+     ORDER BY p.punch_time DESC
+     LIMIT $${idx}`,
+    params
+  );
+  return result.rows;
+};
+
+const getDevices = async () => {
+  const result = await query(`SELECT * FROM hr_attendance_devices ORDER BY created_at DESC`);
+  return result.rows;
+};
+
+const registerDevice = async ({ serial_number, name, location }) => {
+  if (!serial_number) throw { statusCode: 400, message: 'Serial number দিন' };
+  try {
+    const result = await query(
+      `INSERT INTO hr_attendance_devices (serial_number, name, location) VALUES ($1, $2, $3) RETURNING *`,
+      [serial_number, name || null, location || null]
+    );
+    return result.rows[0];
+  } catch (err) {
+    if (err.code === '23505') throw { statusCode: 409, message: 'এই Serial Number ইতিমধ্যে নিবন্ধিত' };
+    throw err;
+  }
+};
+
+const updateDevice = async (id, { name, location, is_active }) => {
+  const result = await query(
+    `UPDATE hr_attendance_devices SET
+       name = COALESCE($1, name), location = COALESCE($2, location), is_active = COALESCE($3, is_active)
+     WHERE id = $4 RETURNING *`,
+    [name, location, is_active, id]
+  );
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'Device পাওয়া যায়নি' };
+  return result.rows[0];
+};
+
 module.exports = {
   getPolicy,
   updatePolicy,
@@ -391,4 +566,13 @@ module.exports = {
   requestWaiver,
   getWaivers,
   decideWaiver,
+  reconcilePunch,
+  getUnmappedPunches,
+  getDeviceMappings,
+  assignDeviceMapping,
+  clearDeviceMapping,
+  getRecentPunches,
+  getDevices,
+  registerDevice,
+  updateDevice,
 };

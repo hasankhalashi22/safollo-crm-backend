@@ -124,9 +124,67 @@ const decideWaiver = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getUnmappedPunches = async (req, res, next) => {
+  try {
+    const result = await attendanceService.getUnmappedPunches();
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const getDeviceMappings = async (req, res, next) => {
+  try {
+    const result = await attendanceService.getDeviceMappings();
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const assignDeviceMapping = async (req, res, next) => {
+  try {
+    const result = await attendanceService.assignDeviceMapping(req.body.employeeId, req.body.devicePin);
+    res.json({ success: true, data: result, message: 'Device PIN assign করা হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const clearDeviceMapping = async (req, res, next) => {
+  try {
+    const result = await attendanceService.clearDeviceMapping(req.params.employeeId);
+    res.json({ success: true, data: result, message: 'Mapping সরানো হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const getRecentPunches = async (req, res, next) => {
+  try {
+    const result = await attendanceService.getRecentPunches({ limit: req.query.limit, employeeId: req.query.employeeId });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const getDevices = async (req, res, next) => {
+  try {
+    const result = await attendanceService.getDevices();
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};
+
+const registerDevice = async (req, res, next) => {
+  try {
+    const result = await attendanceService.registerDevice(req.body);
+    res.status(201).json({ success: true, data: result, message: 'Device নিবন্ধন করা হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
+const updateDevice = async (req, res, next) => {
+  try {
+    const result = await attendanceService.updateDevice(req.params.id, req.body);
+    res.json({ success: true, data: result, message: 'আপডেট হয়েছে ✅' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getPolicy, updatePolicy, getBreakTypes, updateBreakType,
   checkIn, breakOut, breakIn, checkOut,
   getMyTodayStatus, getMyAttendance, getMyMonthlySummary, getAllAttendance,
   requestWaiver, getWaivers, decideWaiver,
+  getUnmappedPunches, getDeviceMappings, assignDeviceMapping, clearDeviceMapping,
+  getRecentPunches, getDevices, registerDevice, updateDevice,
 };

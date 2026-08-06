@@ -465,6 +465,48 @@ await pool.query(`ALTER TABLE hr_leave_applications ADD COLUMN IF NOT EXISTS hal
     `);
     console.log('✅ Attendance table ready');
 
+// ===== Biometric Device Attendance Sync (ZKTeco ADMS) =====
+    await pool.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS device_user_id VARCHAR(20)`);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS hr_employees_device_user_id_uidx
+        ON hr_employees(device_user_id) WHERE device_user_id IS NOT NULL
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance_devices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        serial_number VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100),
+        location VARCHAR(150),
+        is_active BOOLEAN DEFAULT TRUE,
+        last_seen_at TIMESTAMPTZ,
+        last_ip VARCHAR(64),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hr_device_punches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        device_serial VARCHAR(50) NOT NULL,
+        device_pin VARCHAR(20) NOT NULL,
+        punch_time TIMESTAMPTZ NOT NULL,
+        status VARCHAR(10),
+        verify_mode VARCHAR(10),
+        raw_line TEXT NOT NULL,
+        employee_id UUID REFERENCES hr_employees(id) ON DELETE SET NULL,
+        processed BOOLEAN DEFAULT FALSE,
+        process_error TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(device_serial, device_pin, punch_time)
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS hr_device_punches_unprocessed_idx
+        ON hr_device_punches(processed) WHERE processed = FALSE
+    `);
+    console.log('✅ Device attendance sync tables ready');
+
 // ===== Payroll =====
 
     // Per-employee custom salary components (allowances/deductions), recurring each month

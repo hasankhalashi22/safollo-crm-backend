@@ -18,6 +18,7 @@ const fieldConfigRoutes = require('./modules/field-configs/field-configs.routes'
 const hrRoutes = require('./modules/hr/hr.routes');
 const leaveRoutes = require('./modules/leave/leave.routes');
 const attendanceRoutes = require('./modules/attendance/attendance.routes');
+const deviceRoutes = require('./modules/attendance/device.routes');
 const payrollRoutes = require('./modules/payroll/payroll.routes');
 
 const app = express();
@@ -49,6 +50,15 @@ const otpLimiter = rateLimit({
 
 app.use('/api', generalLimiter);
 app.use('/api/auth/send-otp', otpLimiter);
+
+// ZKTeco ADMS devices heartbeat/poll frequently — separate, higher-ceiling limiter, no auth
+// (the device can't send a Bearer token; SN allow-list inside the router gates real access).
+const deviceLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: { success: false, message: 'অনেক বেশি request' },
+});
+app.use('/iclock', deviceLimiter);
 
 // ── Body Parser ───────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
@@ -84,6 +94,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/academy', require('./modules/academy/academy.routes'));
 app.use('/api/teacher', require('./modules/academy/teacher.auth.routes'));
+app.use('/iclock', deviceRoutes);
 
 // ── Error handling ────────────────────────────────────────
 app.use(notFound);

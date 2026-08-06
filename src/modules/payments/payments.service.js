@@ -14,31 +14,39 @@ const updatePaymentAmount = async (paymentId, newAmount, updatedBy) => {
     if (paymentResult.rows.length === 0) throw { statusCode: 404, message: 'Payment পাওয়া যায়নি' };
 
     const payment = paymentResult.rows[0];
-    const oldAmount = Number(payment.amount);
     newAmount = Number(newAmount);
 
     if (newAmount <= 0) throw { statusCode: 400, message: 'Amount অবশ্যই শূন্যের বেশি হতে হবে' };
 
-    // Overpayment check: new total after adjustment
-    const newTotal = Number(payment.total_collected) - oldAmount + newAmount;
+    // Recalculate total from other approved payments (excluding this payment)
+    const otherTotalResult = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) as other_total
+       FROM payments
+       WHERE enrollment_id = $1 AND id != $2 AND approval_status = 'approved'`,
+      [payment.enrollment_id, paymentId]
+    );
+    const otherTotal = Number(otherTotalResult.rows[0].other_total);
+    const newTotal = otherTotal + newAmount;
+
+    // Overpayment check
     if (newTotal > Number(payment.course_price)) {
-      throw { statusCode: 400, message: `Overpayment হবে। সর্বোচ্চ ৳${Number(payment.course_price) - Number(payment.total_collected) + oldAmount} দেওয়া যাবে।` };
+      throw { statusCode: 400, message: `Overpayment হবে। সর্বোচ্চ ৳${Number(payment.course_price) - otherTotal} দেওয়া যাবে।` };
     }
 
     // Update payment amount
     await client.query(`UPDATE payments SET amount = $1 WHERE id = $2`, [newAmount, paymentId]);
 
-    // Update enrollment total_collected
+    // Recalculate enrollment total_collected from actual payments (reliable even if manually edited before)
     await client.query(
       `UPDATE enrollments SET
-         total_collected = total_collected - $1 + $2,
+         total_collected = $1,
          payment_status = CASE
-           WHEN total_collected - $1 + $2 >= course_price THEN 'paid'
-           WHEN total_collected - $1 + $2 > 0 THEN 'partial'
+           WHEN $1 >= course_price THEN 'paid'
+           WHEN $1 > 0 THEN 'partial'
            ELSE 'due'
          END
-       WHERE id = $3`,
-      [oldAmount, newAmount, payment.enrollment_id]
+       WHERE id = $2`,
+      [newTotal, payment.enrollment_id]
     );
 
     // Re-sync accounting (always re-sync if a transaction already existed, or if approved)
