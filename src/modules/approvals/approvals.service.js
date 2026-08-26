@@ -128,11 +128,21 @@ const approveSale = async (enrollmentId, approverId, approverName, editData) => 
     );
 
     // Approve all payments for this enrollment
-    await client.query(
-      `UPDATE payments SET approval_status = 'approved', approved_by = $1, approved_at = NOW(), approver_name = $2
-       WHERE enrollment_id = $3`,
-      [approverId, approverName, enrollmentId]
-    );
+    // If sale_date was edited, also update payment date to match
+    if (editData?.sale_date) {
+      await client.query(
+        `UPDATE payments SET approval_status = 'approved', approved_by = $1, approved_at = NOW(), approver_name = $2,
+           created_at = $4
+         WHERE enrollment_id = $3`,
+        [approverId, approverName, enrollmentId, editData.sale_date]
+      );
+    } else {
+      await client.query(
+        `UPDATE payments SET approval_status = 'approved', approved_by = $1, approved_at = NOW(), approver_name = $2
+         WHERE enrollment_id = $3`,
+        [approverId, approverName, enrollmentId]
+      );
+    }
 
     // Get the first payment for sync
     const paymentResult = await client.query(
