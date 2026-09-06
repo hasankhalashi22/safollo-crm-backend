@@ -118,9 +118,24 @@ const resubmitDuePayment = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const cancelPendingSale = async (req, res, next) => {
+  try {
+    const result = await approvalsService.cancelPendingSale(req.params.id);
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+};
+
+const cancelPendingDuePayment = async (req, res, next) => {
+  try {
+    const result = await approvalsService.cancelPendingDuePayment(req.params.id);
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getPendingApprovals, getPendingDuePayments,
   getMyPendingList, getMyPendingDue,
   approveSale, rejectSale, resubmitSale,
-  approveDuePayment, rejectDuePayment, resubmitDuePayment
+  approveDuePayment, rejectDuePayment, resubmitDuePayment,
+  cancelPendingSale, cancelPendingDuePayment,
 };

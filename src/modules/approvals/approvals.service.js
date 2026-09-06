@@ -366,9 +366,33 @@ const resubmitDuePayment = async (paymentId) => {
   if (result.rows.length === 0) throw { statusCode: 400, message: 'Payment পাওয়া যায়নি' };
   return result.rows[0];
 };
+// Cancel a pending sale (delete enrollment + payments, super_admin/advisor only)
+const cancelPendingSale = async (enrollmentId) => {
+  const result = await query(
+    `SELECT * FROM enrollments WHERE id = $1 AND approval_status = 'pending'`,
+    [enrollmentId]
+  );
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'Pending সেল পাওয়া যায়নি' };
+  await query(`DELETE FROM payments WHERE enrollment_id = $1`, [enrollmentId]);
+  await query(`DELETE FROM enrollments WHERE id = $1`, [enrollmentId]);
+  return { success: true };
+};
+
+// Cancel a pending due payment (delete payment only)
+const cancelPendingDuePayment = async (paymentId) => {
+  const result = await query(
+    `SELECT * FROM payments WHERE id = $1 AND approval_status = 'pending' AND is_due_payment = TRUE`,
+    [paymentId]
+  );
+  if (result.rows.length === 0) throw { statusCode: 404, message: 'Pending due payment পাওয়া যায়নি' };
+  await query(`DELETE FROM payments WHERE id = $1`, [paymentId]);
+  return { success: true };
+};
+
 module.exports = {
   getPendingApprovals, getPendingDuePayments,
   getMyPendingList, getMyPendingDue,
   approveSale, rejectSale, resubmitSale,
-  approveDuePayment, rejectDuePayment, resubmitDuePayment
+  approveDuePayment, rejectDuePayment, resubmitDuePayment,
+  cancelPendingSale, cancelPendingDuePayment,
 };
