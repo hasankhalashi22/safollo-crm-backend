@@ -174,7 +174,7 @@ const rejectSale = async (enrollmentId, rejectorId, rejectorName, reason) => {
 const approveDuePayment = async (paymentId, approverId, approverName) => {
   return await withTransaction(async (client) => {
     const paymentResult = await client.query(
-      `SELECT p.*, e.course_price, e.total_collected
+      `SELECT p.*, e.course_price, e.total_collected, e.id as enrollment_id
        FROM payments p
        JOIN enrollments e ON e.id = p.enrollment_id
        WHERE p.id = $1 AND p.approval_status = 'pending'`,
@@ -183,11 +183,22 @@ const approveDuePayment = async (paymentId, approverId, approverName) => {
     if (paymentResult.rows.length === 0) throw { statusCode: 400, message: 'Payment পাওয়া যায়নি বা আগেই process হয়েছে' };
 
     const payment = paymentResult.rows[0];
-    const remaining = Number(payment.course_price) - Number(payment.total_collected);
+
+    // Recalculate remaining from actual DB (not enrollment cache) to avoid stale total_collected
+    const otherApprovedResult = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) as approved_total
+       FROM payments
+       WHERE enrollment_id = $1 AND approval_status = 'approved'`,
+      [payment.enrollment_id]
+    );
+    const approvedTotal = Number(otherApprovedResult.rows[0].approved_total);
+    const remaining = Number(payment.course_price) - approvedTotal;
+
     if (Number(payment.amount) > remaining) {
       throw { statusCode: 400, message: `Overpayment হবে। বাকি আছে ৳${remaining}, কিন্তু payment ৳${payment.amount}। অনুমোদন করা যাবে না।` };
     }
 
+    // Approve the payment
     const result = await client.query(
       `UPDATE payments SET
          approval_status = 'approved',
@@ -198,6 +209,24 @@ const approveDuePayment = async (paymentId, approverId, approverName) => {
        RETURNING *`,
       [paymentId, approverId, approverName]
     );
+
+    // Update enrollment total_collected and payment_status
+    const newTotal = approvedTotal + Number(payment.amount);
+    await client.query(
+      `UPDATE enrollments SET
+         total_collected = $1,
+         payment_status = CASE
+           WHEN $1 >= course_price THEN 'paid'
+           WHEN $1 > 0 THEN 'partial'
+           ELSE 'due'
+         END
+       WHERE id = $2`,
+      [newTotal, payment.enrollment_id]
+    );
+
+    // Sync to accounting
+    const { syncPaymentToAccounting } = require('../accounting/sync.service');
+    await syncPaymentToAccounting(result.rows[0], payment.enrollment_id, approverId);
 
     return result.rows[0];
   });
