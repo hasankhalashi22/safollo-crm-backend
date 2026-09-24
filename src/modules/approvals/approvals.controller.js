@@ -118,6 +118,14 @@ const resubmitDuePayment = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const bulkApproveSales = async (req, res, next) => {
+  try {
+    const approverName = req.user.full_name || req.user.phone;
+    const result = await approvalsService.bulkApproveSales(req.user.id, approverName);
+    res.json({ success: true, ...result, message: `${result.approved}টি সেল Approve হয়েছে ✅` });
+  } catch (err) { next(err); }
+};
+
 const cancelPendingSale = async (req, res, next) => {
   try {
     const result = await approvalsService.cancelPendingSale(req.params.id);
@@ -138,4 +146,5 @@ module.exports = {
   approveSale, rejectSale, resubmitSale,
   approveDuePayment, rejectDuePayment, resubmitDuePayment,
   cancelPendingSale, cancelPendingDuePayment,
+  bulkApproveSales,
 };

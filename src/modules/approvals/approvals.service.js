@@ -389,10 +389,35 @@ const cancelPendingDuePayment = async (paymentId) => {
   return { success: true };
 };
 
+// Bulk approve all pending sales (super_admin only)
+const bulkApproveSales = async (approverId, approverName) => {
+  const pending = await query(
+    `SELECT id FROM enrollments WHERE approval_status = 'pending'`
+  );
+  const ids = pending.rows.map(r => r.id);
+  if (ids.length === 0) return { approved: 0 };
+
+  let approved = 0;
+  const errors = [];
+  for (const enrollmentId of ids) {
+    try {
+      const result = await approveSale(enrollmentId, approverId, approverName, {});
+      const { syncPaymentToAccounting, syncReceivableOnApproval } = require('../accounting/sync.service');
+      if (result.payment) syncPaymentToAccounting(result.payment, result.enrollment.id, approverId);
+      syncReceivableOnApproval(result.enrollment, approverId);
+      approved++;
+    } catch (err) {
+      errors.push({ enrollmentId, message: err.message || 'Error' });
+    }
+  }
+  return { approved, failed: errors.length, errors };
+};
+
 module.exports = {
   getPendingApprovals, getPendingDuePayments,
   getMyPendingList, getMyPendingDue,
   approveSale, rejectSale, resubmitSale,
   approveDuePayment, rejectDuePayment, resubmitDuePayment,
   cancelPendingSale, cancelPendingDuePayment,
+  bulkApproveSales,
 };
