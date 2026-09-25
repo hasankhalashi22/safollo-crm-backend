@@ -109,6 +109,18 @@ const approveSale = async (enrollmentId, approverId, approverName, editData) => 
       throw { statusCode: 400, message: 'এই সেল আগেই process হয়েছে' };
     }
 
+    // If course is being changed, check no other approved enrollment exists for this student+course
+    if (editData?.course_id && parseInt(editData.course_id) !== enrollment.course_id) {
+      const conflict = await client.query(
+        `SELECT id FROM enrollments
+         WHERE student_id = $1 AND course_id = $2 AND id != $3 AND approval_status = 'approved'`,
+        [enrollment.student_id, parseInt(editData.course_id), enrollmentId]
+      );
+      if (conflict.rows.length > 0) {
+        throw { statusCode: 409, message: 'এই স্টুডেন্ট ইতিমধ্যে ওই কোর্সে approved enrollment আছে। কোর্স পরিবর্তন করা যাবে না।' };
+      }
+    }
+
     const fields = [
       `approval_status = 'approved'`,
       `approved_by = '${approverId}'`,
