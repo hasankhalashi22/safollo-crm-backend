@@ -109,6 +109,30 @@ const approveSale = async (enrollmentId, approverId, approverName, editData) => 
       throw { statusCode: 400, message: 'এই সেল আগেই process হয়েছে' };
     }
 
+    // If course is changing, remove any non-approved conflicting enrollment to avoid unique constraint
+    if (editData?.course_id && parseInt(editData.course_id) !== parseInt(enrollment.course_id)) {
+      const newCourseId = parseInt(editData.course_id);
+      // Check for conflicting approved enrollment — cannot overwrite that
+      const approvedConflict = await client.query(
+        `SELECT id FROM enrollments
+         WHERE student_id = $1 AND course_id = $2 AND id != $3 AND approval_status = 'approved'`,
+        [enrollment.student_id, newCourseId, enrollmentId]
+      );
+      if (approvedConflict.rows.length > 0) {
+        throw { statusCode: 409, message: 'এই স্টুডেন্টের ওই কোর্সে ইতিমধ্যে একটি approved enrollment রয়েছে। কোর্স পরিবর্তন করা যাবে না।' };
+      }
+      // Remove any pending/rejected conflicting enrollment (and its payments) to free the constraint
+      const pendingConflict = await client.query(
+        `SELECT id FROM enrollments
+         WHERE student_id = $1 AND course_id = $2 AND id != $3 AND approval_status IN ('pending','rejected')`,
+        [enrollment.student_id, newCourseId, enrollmentId]
+      );
+      for (const row of pendingConflict.rows) {
+        await client.query(`DELETE FROM payments WHERE enrollment_id = $1`, [row.id]);
+        await client.query(`DELETE FROM enrollments WHERE id = $1`, [row.id]);
+      }
+    }
+
     const fields = [
       `approval_status = 'approved'`,
       `approved_by = '${approverId}'`,
