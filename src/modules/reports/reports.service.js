@@ -117,6 +117,7 @@ const getMonthlySummary = async ({ executiveId, roleLevel, month, year }) => {
        WHERE EXTRACT(MONTH FROM p.created_at) = $1
          AND EXTRACT(YEAR FROM p.created_at) = $2
          AND e.approval_status = 'approved'
+         AND p.approval_status = 'approved'
          ${roleLevel === 3 ? `AND u.manager_id = '${executiveId}'` : ''}
        GROUP BY u.id, sp.full_name, u.phone
        ORDER BY total_collected DESC`,
