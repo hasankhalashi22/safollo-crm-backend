@@ -50,9 +50,10 @@ const getSaleById = async (req, res, next) => {
 
 const getDueList = async (req, res, next) => {
   try {
+    const selfOnly = req.query.self_only === 'true';
     const result = await salesService.getDueList({
       executiveId: req.user.id,
-      roleLevel: req.user.role_level,
+      roleLevel: selfOnly ? 4 : req.user.role_level,
       page: parseInt(req.query.page) || 1,
       limit: parseInt(req.query.limit) || 500,
     });
